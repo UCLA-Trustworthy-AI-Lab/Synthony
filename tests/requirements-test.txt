@@ -1,0 +1,20 @@
+# Testing dependencies for Synthony project
+
+# Core testing framework
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-xdist>=3.3.0  # For parallel testing
+
+# API testing
+httpx>=0.24.0  # For FastAPI TestClient
+
+# Test utilities
+pytest-mock>=3.11.0
+faker>=19.0.0  # For generating test data
+
+# Code quality
+pytest-flake8>=1.1.1
+pytest-mypy>=0.10.3
+
+# Performance testing (optional)
+pytest-benchmark>=4.0.0

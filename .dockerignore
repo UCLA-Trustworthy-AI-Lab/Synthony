@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Environment files (secrets)
+.env
+.env.*
+!.env.example
+
+# Test and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Logs and data (will be mounted as volumes)
+logs/
+data/
+output/
+
+# Documentation (except SystemPrompt)
+docs/
+!docs/SystemPrompt_v2.md
+
+# Tests (not needed in production image)
+tests/
+test_*.py
+
+# Development files
+*.md
+!README.md
+*.rst
+*.txt
+!requirements.txt
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Scripts (not needed in container)
+scripts/
+*.sh
+start_api.py
+stop_api.py

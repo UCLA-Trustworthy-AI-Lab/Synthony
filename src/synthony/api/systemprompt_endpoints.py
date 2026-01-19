@@ -1,0 +1,241 @@
+# System Prompt Upload Endpoint for API Server
+# Add this to src/synthony/api/server.py after the existing endpoints
+@app.post("/systemprompt/upload")
+async def upload_system_prompt(
+    file: UploadFile = File(..., description="System prompt markdown file"),
+    version: str = Query(..., description="Version identifier (e.g., v2.1, 2026-01-16)"),
+    set_active: bool = Query(True, description="Set as active prompt version"),
+    request: Request = None,
+):
+    """
+    Upload and version system prompt for recommendations.
+    
+    **Versioning**: Each upload creates a new version in the database
+    **Active**: Only one prompt can be active at a time
+    **Tracking**: All analyses/recommendations link to the prompt version used
+    
+    **Returns**: Prompt metadata with version info
+    """
+    # Validate file type
+    if not file.filename.endswith(".md"):
+        raise HTTPException(status_code=400, detail="Only Markdown (.md) files are supported")
+    
+    # Get client info
+    ip_address, user_agent = get_client_info(request)
+    
+    try:
+        # Read file content
+        content = (await file.read()).decode('utf-8')
+        
+        # Save to uploads directory
+        prompt_dir = Path("./data/uploads/systemprompt")
+        prompt_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_path = prompt_dir / f"{version}_{file.filename}"
+        file_path.write_text(content)
+        
+        # Store in database
+        prompt = create_system_prompt(
+            version=version,
+            content=content,
+            file_path=str(file_path),
+            set_active=set_active
+        )
+        
+        # Log audit
+        log_audit(
+            session_id=None,  # System-level action
+            action="upload_system_prompt",
+            endpoint="/systemprompt/upload",
+            ip_address=ip_address,
+            success=True,
+            metadata=f"version={version}, active={set_active}"
+        )
+        
+        return {
+            "prompt_id": prompt.prompt_id,
+            "version": prompt.version,
+            "is_active": prompt.is_active,
+            "content_length": len(content),
+            "file_path": str(file_path),
+            "message": f"System prompt {version} uploaded {'and set as active' if set_active else 'successfully'}"
+        }
+        
+    except Exception as e:
+        error_msg = log_error(None, "upload_prompt", e)
+        raise HTTPException(status_code=500, detail=f"Failed to upload system prompt: {error_msg}")
+
+
+@app.get("/systemprompt/list")
+async def list_system_prompt():
+    """
+    List all system prompt versions.
+    
+    **Returns**: List of all prompts with active status
+    """
+    prompts = list_system_prompt()
+    return {
+        "total": len(prompts),
+        "prompts": [p.to_dict() for p in prompts],
+        "active_version": next((p.version for p in prompts if p.is_active), None)
+    }
+
+
+@app.get("/systemprompt/active")
+async def get_active_system_prompt():
+    """
+    Get currently active system prompt.
+    
+    **Returns**: Active prompt content and metadata
+    """
+    prompt = get_active_prompt()
+    if not prompt:
+        raise HTTPException(status_code=404, detail="No active system prompt found")
+    
+    return {
+        "prompt_id": prompt.prompt_id,
+        "version": prompt.version,
+        "content": prompt.content,
+        "created_at": prompt.created_at.isoformat(),
+        "content_length": len(prompt.content)
+    }
+
+
+@app.put("/systemprompt/activate/{prompt_id}")
+async def activate_system_prompt(prompt_id: str):
+    """
+    Set a specific prompt version as active.
+    
+    **Returns**: Confirmation message
+    """
+    set_active_system_prompt(prompt_id)
+    
+    return {
+        "activated": True,
+        "prompt_id": prompt_id,
+        "message": "System prompt version activated successfully"
+    }
+
+
+
+
+# # ============================================================================
+# # System Prompt Management Endpoints
+# # ============================================================================
+
+
+# # @app.post("/upload/systemprompt")
+# # async def upload_system_prompt(
+# #     file: UploadFile = File(..., description="System prompt markdown file"),
+# #     version: str = Query(..., description="Version identifier (e.g., v2.1, 2026-01-16)"),
+# #     set_active: bool = Query(True, description="Set as active prompt version"),
+# #     request: Request = None,
+# # ):
+# #     """
+# #     Upload and version system prompt for recommendations.
+    
+# #     **Versioning**: Each upload creates a new version in the database
+# #     **Active**: Only one prompt can be active at a time
+# #     **Tracking**: All analyses/recommendations link to the prompt version used
+    
+# #     **Returns**: Prompt metadata with version info
+# #     """
+# #     # Validate file type
+# #     if not file.filename.endswith(".md"):
+# #         raise HTTPException(status_code=400, detail="Only Markdown (.md) files are supported")
+    
+# #     # Get client info
+# #     ip_address, user_agent = get_client_info(request)
+    
+# #     try:
+# #         # Read file content
+# #         content = (await file.read()).decode('utf-8')
+        
+# #         # Save to uploads directory
+# #         prompt_dir = Path("./data/uploads/systemprompt")
+# #         prompt_dir.mkdir(parents=True, exist_ok=True)
+        
+# #         file_path = prompt_dir / f"{version}_{file.filename}"
+# #         file_path.write_text(content)
+        
+# #         # Store in database
+# #         prompt = create_system_prompt(
+# #             version=version,
+# #             content=content,
+# #             file_path=str(file_path),
+# #             set_active=set_active
+# #         )
+        
+# #         # Log audit
+# #         log_audit(
+# #             session_id=None,  # System-level action
+# #             action="upload_prompt",
+# #             endpoint="/upload/systemprompt",
+# #             ip_address=ip_address,
+# #             success=True,
+# #             metadata=f"version={version}, active={set_active}"
+# #         )
+        
+# #         return {
+# #             "prompt_id": prompt.prompt_id,
+# #             "version": prompt.version,
+# #             "is_active": prompt.is_active,
+# #             "content_length": len(content),
+# #             "file_path": str(file_path),
+# #             "message": f"System prompt {version} uploaded {'and set as active' if set_active else 'successfully'}"
+# #         }
+        
+# #     except Exception as e:
+# #         error_msg = log_error(None, "upload_prompt", e)
+# #         raise HTTPException(status_code=500, detail=f"Failed to upload system prompt: {error_msg}")
+
+
+# # @app.get("/systemprompts")
+# # async def list_prompts():
+# #     """
+# #     List all system prompt versions.
+    
+# #     **Returns**: List of all prompts with active status
+# #     """
+# #     prompts = list_system_prompts()
+# #     return {
+# #         "total": len(prompts),
+# #         "prompts": [p.to_dict() for p in prompts],
+# #         "active_version": next((p.version for p in prompts if p.is_active), None)
+# #     }
+
+
+# # @app.get("/systemprompts/active")
+# # async def get_active_system_prompt():
+# #     """
+# #     Get currently active system prompt.
+    
+# #     **Returns**: Active prompt content and metadata
+# #     """
+# #     prompt = get_active_prompt()
+# #     if not prompt:
+# #         raise HTTPException(status_code=404, detail="No active system prompt found")
+    
+# #     return {
+# #         "prompt_id": prompt.prompt_id,
+# #         "version": prompt.version,
+# #         "content": prompt.content,
+# #         "created_at": prompt.created_at.isoformat(),
+# #         "content_length": len(prompt.content)
+# #     }
+
+
+# @app.put("/systemprompts/{prompt_id}/activate")
+# async def activate_prompt(prompt_id: str):
+#     """
+#     Set a specific prompt version as active.
+    
+#     **Returns**: Confirmation message
+#     """
+#     set_active_prompt(prompt_id)
+    
+#     return {
+#         "activated": True,
+#         "prompt_id": prompt_id,
+#         "message": "Prompt version activated successfully"
+#     }

@@ -1,0 +1,64 @@
+version: '3.9'
+
+services:
+  synthony-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: synthony:dev
+    container_name: synthony-api
+    ports:
+      - "8000:8000"
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - API_WORKERS=1
+      - SYNTHONY_SYSTEM_PROMPT=/app/docs/SystemPrompt_v2.md
+      # LLM Configuration (optional)
+      - VLLM_URL=${VLLM_URL:-}
+      - VLLM_API_KEY=${VLLM_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+    volumes:
+      # Development: mount source for hot-reload
+      - ./src:/app/src:ro
+      - ./docs:/app/docs:ro
+      # Mount .env file for API keys
+      - ./.env:/app/.env:ro
+      # Persist data and logs
+      - ./data:/app/data
+      - ./logs:/app/logs
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Development mode with hot-reload
+  synthony-api-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: synthony:dev
+    container_name: synthony-api-dev
+    ports:
+      - "8001:8000"
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - API_WORKERS=1
+      - VLLM_URL=${VLLM_URL:-}
+      - VLLM_API_KEY=${VLLM_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+    volumes:
+      - ./src:/app/src:ro
+      - ./docs:/app/docs:ro
+      - ./.env:/app/.env:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+    command: [ "python", "-m", "uvicorn", "synthony.api.server:app", "--host", "0.0.0.0", "--port", "8000", "--reload" ]
+    profiles:
+      - dev
