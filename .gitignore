@@ -126,6 +126,9 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
+# sqlite database
+data/synthony.db
+
 # mkdocs documentation
 /site
 
@@ -162,3 +165,7 @@ profile_*.json
 
 # Output
 output/
+
+
+# MCP config file
+.mcp.json

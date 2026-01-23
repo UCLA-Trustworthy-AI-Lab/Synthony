@@ -1,0 +1,92 @@
+# ============================================================
+# Synthony MCP Server - Production Dockerfile
+# ============================================================
+# Multi-stage build for optimized MCP server image
+#
+# Build: docker build -f Dockerfile.mcp -t synthony-mcp:latest .
+# Run:   docker run -i synthony-mcp:latest
+# Interactive: docker run -it synthony-mcp:latest
+# ============================================================
+
+# --- Stage 1: Builder ---
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependency files
+COPY requirements.txt pyproject.toml README.md ./
+COPY src/ ./src/
+COPY mcp_server/ ./mcp_server/
+
+# Create virtual environment and install dependencies
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -e .
+
+# --- Stage 2: Runtime ---
+FROM python:3.11-slim AS runtime
+
+WORKDIR /app
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy application code
+COPY src/ ./src/
+COPY mcp_server/ ./mcp_server/
+COPY docs/SystemPrompt_v3.md ./docs/SystemPrompt_v3.md
+
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash appuser && \
+    mkdir -p /app/data /app/logs /app/.cache && \
+    chown -R appuser:appuser /app
+USER appuser
+
+# Environment variables
+ENV SYNTHONY_SYSTEM_PROMPT=/app/docs/SystemPrompt_v3.md \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    MCP_DEBUG=0
+
+# MCP server uses stdio transport - no port exposure needed
+# The server communicates via stdin/stdout following JSON-RPC 2.0 protocol
+
+# Entrypoint: Run MCP server on stdio transport
+# MCP clients (like Claude Code) will communicate via stdin/stdout
+CMD ["python", "-m", "mcp_server.server"]
+
+# ============================================================
+# Usage Notes:
+# ============================================================
+# 1. MCP Protocol: This server uses stdio transport (stdin/stdout)
+#    rather than HTTP, so no port mapping is needed.
+#
+# 2. Interactive Mode: Run with -i flag for stdio communication:
+#    docker run -i synthony-mcp:latest
+#
+# 3. Debug Mode: Enable MCP debug logging:
+#    docker run -e MCP_DEBUG=1 -i synthony-mcp:latest
+#
+# 4. Volume Mounting: Mount data directory for persistent storage:
+#    docker run -i -v ./data:/app/data synthony-mcp:latest
+#
+# 5. Testing: Send JSON-RPC 2.0 messages via stdin:
+#    echo '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":1}' | \
+#    docker run -i synthony-mcp:latest
+#
+# 6. Claude Code Integration: Configure in claude_desktop_config.json:
+#    "mcpServers": {
+#      "synthony": {
+#        "command": "docker",
+#        "args": ["run", "-i", "synthony-mcp:latest"]
+#      }
+#    }
+# ============================================================

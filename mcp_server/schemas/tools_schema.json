@@ -1,0 +1,288 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Synthony MCP Tools Schema",
+  "description": "JSON Schema definitions for all Synthony MCP tools",
+  "version": "1.0.0",
+  "tools": {
+    "list_datasets": {
+      "description": "List available datasets in configured data directory",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "format_filter": {
+            "type": "string",
+            "enum": ["csv", "parquet", "all"],
+            "description": "Filter by file format (default: all)"
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "data_dir": {"type": "string"},
+          "datasets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {"type": "string"},
+                "format": {"type": "string"},
+                "size_bytes": {"type": "integer"},
+                "path": {"type": "string"}
+              }
+            }
+          },
+          "total_count": {"type": "integer"}
+        }
+      }
+    },
+    "load_dataset": {
+      "description": "Load dataset by name and return metadata + preview",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "dataset_name": {
+            "type": "string",
+            "description": "Name of dataset (e.g., 'Bean', 'Titanic')"
+          },
+          "format": {
+            "type": "string",
+            "enum": ["csv", "parquet"],
+            "description": "File format (auto-detected if omitted)"
+          },
+          "preview_rows": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Number of preview rows (default: 5)"
+          }
+        },
+        "required": ["dataset_name"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "dataset_name": {"type": "string"},
+          "file_path": {"type": "string"},
+          "format": {"type": "string"},
+          "rows": {"type": "integer"},
+          "columns": {"type": "integer"},
+          "column_names": {"type": "array", "items": {"type": "string"}},
+          "dtypes": {"type": "object"},
+          "memory_usage_mb": {"type": "number"},
+          "preview": {"type": "array", "items": {"type": "object"}}
+        }
+      }
+    },
+    "analyze_stress_profile": {
+      "description": "Analyze dataset stress profile (accepts dataset_name or data_path)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "dataset_name": {
+            "type": "string",
+            "description": "Name of dataset in configured data directory"
+          },
+          "data_path": {
+            "type": "string",
+            "description": "Absolute path to CSV or Parquet file (alternative to dataset_name)"
+          },
+          "dataset_id": {
+            "type": "string",
+            "description": "Optional dataset identifier"
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "dataset_id": {"type": "string"},
+          "dataset_profile": {"type": "object"},
+          "column_analysis": {"type": "object"},
+          "message": {"type": "string"}
+        },
+        "required": ["dataset_id", "dataset_profile", "message"]
+      }
+    },
+    "generate_benchmark_dataset": {
+      "description": "Generate synthetic control datasets",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "dataset_type": {
+            "type": "string",
+            "enum": ["long_tail", "needle_haystack", "small_data_trap"]
+          },
+          "output_path": {
+            "type": "string"
+          },
+          "num_rows": {
+            "type": "integer",
+            "minimum": 100
+          }
+        },
+        "required": ["dataset_type", "output_path"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "dataset_type": {"type": "string"},
+          "output_path": {"type": "string"},
+          "num_rows": {"type": "integer"},
+          "num_columns": {"type": "integer"},
+          "expected_stress_factors": {"type": "object"}
+        }
+      }
+    },
+    "check_model_constraints": {
+      "description": "Check model constraint compatibility",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "cpu_only": {"type": "boolean"},
+          "strict_dp": {"type": "boolean"},
+          "row_count": {"type": "integer"},
+          "min_data_size": {"type": "integer"},
+          "max_data_size": {"type": "integer"}
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "compatible_models": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "excluded_models": {"type": "object"},
+          "constraints_applied": {"type": "object"}
+        }
+      }
+    },
+    "get_model_info": {
+      "description": "Get detailed model information",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "model_name": {"type": "string"}
+        },
+        "required": ["model_name"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "model_name": {"type": "string"},
+          "full_name": {"type": "string"},
+          "type": {"type": "string"},
+          "capabilities": {"type": "object"},
+          "constraints": {"type": "object"},
+          "performance": {"type": "object"},
+          "description": {"type": "string"},
+          "strengths": {"type": "array"},
+          "limitations": {"type": "array"}
+        }
+      }
+    },
+    "list_models": {
+      "description": "List available models with filtering",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "model_type": {
+            "type": "string",
+            "enum": ["GAN", "VAE", "Diffusion", "Tree-based", "Statistical", "LLM"]
+          },
+          "cpu_only": {"type": "boolean"},
+          "requires_dp": {"type": "boolean"}
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "total_models": {"type": "integer"},
+          "filtered_models": {"type": "integer"},
+          "models": {"type": "object"},
+          "model_ranking": {"type": "object"}
+        }
+      }
+    },
+    "rank_models_hybrid": {
+      "description": "Rank models using hybrid approach",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "dataset_profile": {"type": "object"},
+          "column_analysis": {"type": "object"},
+          "constraints": {"type": "object"},
+          "method": {
+            "type": "string",
+            "enum": ["rule_based", "llm", "hybrid"]
+          },
+          "top_n": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "required": ["dataset_profile"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "primary_model": {"type": "object"},
+          "alternatives": {"type": "array"},
+          "reasoning": {"type": "string"},
+          "warnings": {"type": "array"}
+        }
+      }
+    },
+    "get_tie_breaker_logic": {
+      "description": "Get tie-breaking logic for close scores",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "tied_models": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "dataset_profile": {"type": "object"},
+          "prefer_speed": {"type": "boolean"}
+        },
+        "required": ["tied_models", "dataset_profile"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "winner": {"type": "string"},
+          "reasoning": {"type": "string"},
+          "rule_applied": {"type": "string"},
+          "tied_models": {"type": "array"},
+          "dataset_characteristics": {"type": "object"}
+        }
+      }
+    },
+    "explain_recommendation_reasoning": {
+      "description": "Generate explanation for recommendation",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "recommendation_result": {"type": "object"},
+          "dataset_profile": {"type": "object"},
+          "detail_level": {
+            "type": "string",
+            "enum": ["brief", "detailed", "technical"]
+          }
+        },
+        "required": ["recommendation_result", "dataset_profile"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "explanation": {"type": "string"},
+          "key_factors": {"type": "array"},
+          "model_strengths": {"type": "string"},
+          "alternatives_comparison": {"type": "string"}
+        }
+      }
+    }
+  }
+}

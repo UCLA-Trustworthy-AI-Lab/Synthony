@@ -2,7 +2,7 @@
 Hybrid recommendation engine: Rule-based + LLM-based recommendations.
 
 Implements both:
-1. Rule-based scoring from model_capabilities.json (v2 with Hard Problem detection)
+1. Rule-based scoring from model_capabilities.json (v3 with Hard Problem detection)
 2. LLM-based inference using OpenAI API with SystemPrompt
 """
 
@@ -136,8 +136,9 @@ class ModelRecommendationEngine:
     Modes:
     - rule_based: Fast, deterministic scoring using model_capabilities.json
       - v2: Includes Hard Problem detection and safety checks
+      - v3: fine-tuned with synthetic data
     - llm: Uses OpenAI API with SystemPrompt for contextual reasoning
-    - hybrid: Combines both approaches (rule-based ranking + LLM reasoning)
+    - h-brid: Combines both approaches (rule-based ranking + LLM reasoning)
     """
 
     def __init__(
@@ -154,7 +155,7 @@ class ModelRecommendationEngine:
         Args:
             config: Engine configuration (thresholds, fallbacks). Uses defaults if None.
             capabilities_path: Path to model_capabilities.json
-            system_prompt_path: Path to SystemPrompt_v2.md
+            system_prompt_path: Path to SystemPrompt.md
             openai_api_key: OpenAI API key (or set OPENAI_API_KEY env var)
             openai_model: OpenAI model to use (default: gpt-4o)
             openai_base_url: Optional base URL for OpenAI-compatible API (e.g., VLLM)
@@ -177,11 +178,11 @@ class ModelRecommendationEngine:
             if env_path:
                 system_prompt_path = Path(env_path)
             else:
-                # Default to SystemPrompt_v2.md in docs/
+                # Default to SystemPrompt_v3.md in docs/
                 system_prompt_path = (
                     Path(__file__).parent.parent.parent.parent
                     / "docs"
-                    / "SystemPrompt_v2.md"
+                    / "SystemPrompt_v3.md"
                 )
 
         self.system_prompt_path = system_prompt_path

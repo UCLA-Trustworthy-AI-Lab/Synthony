@@ -59,6 +59,9 @@ api = [
     "sqlalchemy>=2.0.0",
     "python-dotenv>=1.0.0",
 ]
+mcp = [
+    "mcp>=0.9.0",
+]
 llm = [
     "openai>=1.10.0",
 ]
@@ -72,12 +75,14 @@ all = [
     "sqlalchemy>=2.0.0",
     "python-dotenv>=1.0.0",
     "openai>=1.10.0",
+    "mcp>=0.9.0",
 ]
 
 [project.scripts]
 synthony-profile = "synthony.cli:profile_command"
 synthony-benchmark = "synthony.cli:benchmark_command"
 synthony-api = "synthony.api.server:main"
+synthony-mcp = "mcp_server.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

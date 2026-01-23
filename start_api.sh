@@ -78,8 +78,8 @@ if [ -n "$SYNTHONY_SYSTEM_PROMPT" ]; then
     else
         echo -e "${RED}✗ Custom SystemPrompt not found: $SYNTHONY_SYSTEM_PROMPT${NC}"
     fi
-elif [ -f "docs/SystemPrompt_v2.md" ]; then
-    echo -e "${GREEN}✓ Using default SystemPrompt: docs/SystemPrompt_v2.md${NC}"
+elif [ -f "docs/SystemPrompt_v3.md" ]; then
+    echo -e "${GREEN}✓ Using default SystemPrompt: docs/SystemPrompt_v3.md${NC}"
 else
     echo -e "${YELLOW}⚠️  SystemPrompt file not found${NC}"
 fi

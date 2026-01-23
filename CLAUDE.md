@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The codebase is designed as a modular ecosystem with strict separation of concerns:
 
 ### Package 1: `synthony` (Data Infrastructure)
+
 - **Purpose**: Standalone library for data ingestion and statistical profiling
 - **Core Class**: `StochasticDataAnalyzer`
 - **Responsibility**: Convert raw CSV/Parquet into a "Stress Profile" containing:
@@ -24,12 +25,14 @@ The codebase is designed as a modular ecosystem with strict separation of concer
 - **Tech Stack**: Pandas, Scipy, Polars (for performance)
 
 ### Package 2: `table-synthesizers` (External Repository)
+
 - **Purpose**: Heavy-lifting training engine hosting 13+ SOTA models
 - **Models**: TabDDPM, TabSyn, AutoDiff, GReaT, TabTree, TVAE, CTGAN, PATE-CTGAN, DPCART, AIM, GaussianCopula, ARF
 - **Integration**: Synthony maintains a **Shadow Interface** (`model_capabilities.json`) to understand model capabilities without importing heavy dependencies
 - **Note**: This is an external repository; Synthony does not directly import these models
 
 ### MCP Server (Orchestration Brain)
+
 **Replaces the original Package 3 FastAPI design**
 
 - **Purpose**: MCP server that exposes data profiling and model recommendation capabilities to AI agents
@@ -42,6 +45,7 @@ The codebase is designed as a modular ecosystem with strict separation of concer
 mcp-server-synthony/
 ├── server.py                      # Main MCP server entry point
 ├── tools/
+│   ├── data_tools.py             # Dataset discovery and loading tools
 │   ├── profiling_tools.py        # Tools for Package 1 integration
 │   ├── model_tools.py            # Tools for Package 2 shadow interface
 │   └── recommendation_tools.py   # Hybrid rule-based + LLM engine
@@ -60,14 +64,25 @@ mcp-server-synthony/
 
 ### Tools (Model-Controlled, Actively Executable)
 
-| Tool | Purpose | Package Mapping |
-|------|---------|-----------------|
-| `analyze_stress_profile` | Extract skewness, cardinality, zipfian ratio from tabular data | Package 1: StochasticDataAnalyzer |
-| `check_model_constraints` | Validate constraints (cpu_only, strict_dp, data size limits) | Package 2: Shadow Interface |
-| `rank_models_hybrid` | Score models 0-4 using rule-based + LLM decision logic | MCP Server: Recommendation Engine |
-| `get_tie_breaker_logic` | Resolve conflicts when models score within 5% | MCP Server: Tie-Breaker Rules |
-| `explain_recommendation_reasoning` | Generate user-friendly explanation for model selection | MCP Server: LLM Narrative Engine |
-| `generate_benchmark_dataset` | Create synthetic control datasets for validation | Package 1: BenchmarkGenerator |
+| Tool | Purpose | Package Mapping | Status |
+|------|---------|-----------------|--------|
+| `list_datasets` | List available datasets in configured data directory | MCP Server: DataTools | ✅ Implemented |
+| `load_dataset` | Load dataset by name, return metadata and preview | MCP Server: DataTools | ✅ Implemented |
+| `analyze_stress_profile` | Extract skewness, cardinality, zipfian ratio (accepts `dataset_name` or `data_path`) | Package 1: StochasticDataAnalyzer | ✅ Implemented |
+| `check_model_constraints` | Validate constraints (cpu_only, strict_dp, data size limits) | Package 2: Shadow Interface | ✅ Implemented |
+| `rank_models_hybrid` | Score models 0-4 using rule-based + LLM decision logic | MCP Server: Recommendation Engine | ✅ Implemented |
+| `rank_models_rule` | Score models using ONLY rule-based approach (pure Python, no LLM) | MCP Server: Rule-Based Engine | ✅ Implemented |
+| `rank_models_llm` | Score models using ONLY LLM approach (requires OpenAI API) | MCP Server: LLM Engine | ✅ Implemented |
+| `get_tie_breaker_logic` | Resolve conflicts when models score within 5% | MCP Server: Tie-Breaker Rules | ✅ Implemented |
+| `explain_recommendation_reasoning` | Generate user-friendly explanation for model selection | MCP Server: LLM Narrative Engine | ✅ Implemented |
+| `generate_benchmark_dataset` | Create synthetic control datasets for validation | Package 1: BenchmarkGenerator | ✅ Implemented |
+| **`analyze_and_recommend`** | **[TODO] End-to-end workflow: analyze dataset + recommend model in single call (accepts `dataset_name`/`data_path` + `constraints`)** | **MCP Server: Workflow Tool** | **🚧 Not Implemented** |
+
+**Note:** Currently, end-to-end analysis + recommendation requires 2 sequential tool calls:
+1. `analyze_stress_profile` → get dataset profile
+2. `rank_models_hybrid` → get recommendations using profile
+
+The planned `analyze_and_recommend` tool will combine these into a single convenient call.
 
 ### Resources (Application-Driven, Read-Only Context)
 
@@ -93,12 +108,15 @@ mcp-server-synthony/
 The recommendation engine uses a **multi-stage funnel** approach:
 
 ### 1. Hard Filters (Eliminates Impossible Options)
+
 - `cpu_only`: Removes GPU-dependent models (TabDDPM, TabSyn, GReaT)
 - `strict_dp`: Keeps only differential privacy models (PATE-CTGAN, DPCART, AIM)
 - `large_data` (>50k rows): Eliminates LLMs due to context window/latency constraints
 
 ### 2. Stress Detection (Identifies Data Difficulty)
+
 Critical thresholds that define "Hard Problems":
+
 - **Severe Skew**: Skewness > 2.0 (disqualifies basic GANs/VAEs, favors Diffusion/LLMs)
 - **High Cardinality**: Unique count > 500 (triggers rare-category collapse checks)
 - **Zipfian Distribution**: Top 20% categories > 80% of data (requires specialized tokenization)
@@ -106,7 +124,9 @@ Critical thresholds that define "Hard Problems":
 - **Large Data**: Row count > 50k (eliminates LLMs)
 
 ### 3. Model Scoring (0-4 Capability Scale)
+
 Models are scored across dimensions:
+
 - **Skew Handling**: GReaT (4), TabDDPM/TabSyn/AutoDiff/TabTree (3), ARF (2), Others (1)
 - **High Cardinality**: GReaT/TabTree (4), CTGAN/TabSyn/ARF (3), Others (1-2)
 - **Zipfian**: GReaT (4), TabSyn/TabTree/ARF (3), Others (1-2)
@@ -114,7 +134,9 @@ Models are scored across dimensions:
 - **Privacy (DP)**: PATE-CTGAN/AIM (4), DPCART (3), Others (0)
 
 ### 4. Tie-Breaking Rules
+
 When top models are within 5% score:
+
 - Rows < 500: Prefer ARF (best for small data)
 - Rows > 50k with "Hard Problem" (Skew>2 & Card>500 & Zipf>0.05): Prefer TabDDPM (GReaT too slow)
 - Otherwise: Prefer faster models (TVAE/ARF) over slower ones (Diffusion/LLMs)
@@ -122,26 +144,34 @@ When top models are within 5% score:
 ## Critical Design Patterns
 
 ### "Hard Problem" Detection
+
 The system specifically identifies data characteristics that break traditional models:
+
 1. **The Long Tail**: LogNormal skew > 2.0 (basic GANs fail to capture tail distribution)
 2. **The Needle in Haystack**: Zipfian with 1000+ categories where top 10 = 90% volume (mode collapse risk)
 3. **The Small Data Trap**: < 500 rows (overfitting/memorization risk)
 
 ### Shadow Interface Pattern
+
 `model_capabilities.json` maintains model metadata without importing heavy ML libraries:
+
 - Allows fast recommendation without loading TensorFlow/PyTorch
 - Decouples decision logic from model implementation
 - Enables independent versioning and updates
 
 ### Benchmark-Driven Feedback Loop
+
 The system is designed to be self-correcting:
+
 1. **Analyze**: User uploads data → generate profile
 2. **Recommend**: Match profile to model using scores
 3. **Validate**: Run offline benchmarks (Wasserstein Distance, TVD) on synthetic control datasets
 4. **Refine**: Update `SystemPrompt.md` scores if empirical results differ from theoretical expectations
 
 ### MCP Notification Pattern
+
 Use server-sent notifications when:
+
 - Benchmark validation completes and changes recommendation confidence
 - `SystemPrompt.md` knowledge base is updated from empirical feedback
 - New models are added to the registry
@@ -149,6 +179,7 @@ Use server-sent notifications when:
 ## Key Algorithms
 
 ### Zipfian Detection
+
 ```
 1. Sort category counts in descending order
 2. Calculate cumulative sum of top 20%
@@ -157,6 +188,7 @@ Use server-sent notifications when:
 ```
 
 ### Higher-Order Correlation Detection
+
 ```
 1. Compute full correlation matrix
 2. Check if > 50% of pairs have |correlation| > 0.1 (dense matrix)
@@ -167,6 +199,7 @@ Use server-sent notifications when:
 ## Validation Strategy
 
 ### Synthetic Control Datasets
+
 Three benchmark datasets validate model scores:
 
 1. **Dataset A: "The Long Tail"**
@@ -189,6 +222,7 @@ Three benchmark datasets validate model scores:
 Note: This repository is in early stages. The following structure is planned:
 
 ### Package 1 (synthony)
+
 ```bash
 # Run data profiler tests
 pytest tests/test_stochastic_analyzer.py
@@ -201,9 +235,18 @@ python -m src.profiler.analyze --input data.csv --output profile.json
 ```
 
 ### MCP Server
+
 ```bash
+# Configure data directory (optional, defaults to dataset/input_data/)
+export SYNTHONY_DATA_DIR=/path/to/your/datasets
+
 # Start MCP server (stdio transport for local AI agent)
 python -m mcp_server.server
+
+# Start MCP server with verbose logging (prints all tool calls/responses to stderr)
+python -m mcp_server.server --verbose
+# Shorthand:
+python -m mcp_server.server -v
 
 # Test MCP protocol
 python -m mcp_server.tests.test_protocol
@@ -216,9 +259,13 @@ MCP_DEBUG=1 python -m mcp_server.server
 
 # Test a specific tool via MCP JSON-RPC
 echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"analyze_stress_profile","arguments":{"data_path":"test.csv"}},"id":1}' | python -m mcp_server.server
+
+# Test with verbose output to see exactly what server receives/returns
+echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"analyze_stress_profile","arguments":{"data_path":"test.csv"}},"id":1}' | python -m mcp_server.server --verbose
 ```
 
 ### MCP Discovery Commands
+
 ```bash
 # List all available tools
 echo '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":1}' | python -m mcp_server.server
@@ -232,10 +279,10 @@ echo '{"jsonrpc":"2.0","method":"prompts/list","params":{},"id":1}' | python -m 
 
 ## Important Files
 
-- `docs/architecture_v2.md`: Complete system architecture and design rationale
+- `docs/architecture_v3.md`: Complete system architecture and design rationale
 - `docs/Implementation_plan.md`: Project roadmap and milestone tracking
-- `docs/SystemPrompt_v2.md`: Knowledge base with 0-4 model capability scores (used by LLM engine)
-- `docs/validation_plan_knowledge_base_v2.md`: Benchmark datasets and validation strategy
+- `docs/SystemPrompt_v3.md`: Knowledge base with 0-4 model capability scores (used by LLM engine)
+- `docs/validation_plan_knowledge_base_v3.md`: Benchmark datasets and validation strategy
 - `model_capabilities.json`: (Planned) Static registry for MCP server decision engine
 - `mcp_server/server.py`: (Planned) Main MCP server entry point
 - `mcp_server/schemas/`: (Planned) JSON Schema definitions for tools and resources
@@ -243,6 +290,7 @@ echo '{"jsonrpc":"2.0","method":"prompts/list","params":{},"id":1}' | python -m 
 ## Code Style Conventions
 
 Based on the architecture documents:
+
 - Use strict type annotations for all data profile outputs (JSON schemas)
 - Maintain separation: Package 1 knows nothing about models; MCP Server knows nothing about heavy ML imports
 - All thresholds (e.g., Skew > 2.0, Cardinality > 500) should be configurable constants
@@ -250,6 +298,7 @@ Based on the architecture documents:
 - Decision logic must be deterministic and traceable (log reasoning chain)
 
 ### MCP-Specific Conventions
+
 - Tool descriptions must be detailed enough for AI agents to understand when to call them
 - All tool inputs use JSON Schema validation
 - Resources should be versioned and support efficient caching
@@ -269,13 +318,16 @@ Based on the architecture documents:
 ## MCP Integration Notes
 
 ### FastAPI to MCP Migration
+
 The original Package 3 design was FastAPI-based. The transition to MCP provides:
+
 - **Stateful connections** vs stateless REST endpoints
 - **Bidirectional communication** for real-time benchmark updates
 - **Native AI agent integration** without HTTP overhead
 - **Capability negotiation** through MCP protocol handshake
 
 ### Why MCP for This Project
+
 1. **Direct Claude Code Integration**: AI agents can call profiling and recommendation tools directly
 2. **Resource Subscriptions**: Clients can subscribe to benchmark updates and knowledge base changes
 3. **Guided Workflows**: Prompts codify best practices for using the recommendation engine
@@ -283,8 +335,12 @@ The original Package 3 design was FastAPI-based. The transition to MCP provides:
 5. **Protocol Versioning**: MCP's capability negotiation ensures backwards compatibility
 
 ### Using the MCP Server with Claude Code
+
 When the MCP server is configured, Claude Code can:
-- Call `analyze_stress_profile` to understand dataset characteristics
+
+- Call `list_datasets` to discover available datasets in the data directory
+- Call `load_dataset` to inspect dataset metadata and preview rows
+- Call `analyze_stress_profile` with `dataset_name` to profile a dataset
 - Query `models://registry` to see all available synthesis models
 - Execute `rank_models_hybrid` to get recommendations
 - Use `/analyze-and-recommend` prompt for full guided workflow

@@ -43,7 +43,7 @@ def test_system_prompt_upload():
     print("TEST 2: System Prompt Upload & Deduplication")
     print("=" * 80)
     
-    prompt_file = Path("docs/SystemPrompt_v2.md")
+    prompt_file = Path("docs/SystemPrompt_v3.md")
     assert prompt_file.exists(), f"System prompt not found: {prompt_file}"
     
     # First upload

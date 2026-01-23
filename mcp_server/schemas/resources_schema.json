@@ -1,0 +1,110 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Synthony MCP Resources Schema",
+  "description": "JSON Schema definitions for all Synthony MCP resources",
+  "version": "1.0.0",
+  "resources": {
+    "models://registry": {
+      "description": "Complete model catalog",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "uri": {"type": "string"},
+          "type": {"type": "string", "const": "model_registry"},
+          "models": {"type": "object"},
+          "model_ranking": {"type": "object"},
+          "total_models": {"type": "integer"},
+          "description": {"type": "string"}
+        }
+      }
+    },
+    "models://model/{model_name}": {
+      "description": "Individual model details",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "uri": {"type": "string"},
+          "type": {"type": "string", "const": "model_details"},
+          "model_name": {"type": "string"},
+          "full_name": {"type": "string"},
+          "model_type": {"type": "string"},
+          "capabilities": {"type": "object"},
+          "constraints": {"type": "object"},
+          "performance": {"type": "object"},
+          "description": {"type": "string"},
+          "strengths": {"type": "array"},
+          "limitations": {"type": "array"}
+        }
+      }
+    },
+    "datasets://profiles/{dataset_id}": {
+      "description": "Cached dataset profile",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "uri": {"type": "string"},
+          "type": {"type": "string", "const": "cached_profile"},
+          "dataset_id": {"type": "string"},
+          "analysis_id": {"type": "string"},
+          "dataset_profile": {"type": "object"},
+          "column_analysis": {"type": "object"},
+          "metadata": {"type": "object"}
+        }
+      }
+    },
+    "benchmarks://thresholds": {
+      "description": "Stress detector thresholds",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "uri": {"type": "string"},
+          "type": {"type": "string", "const": "thresholds"},
+          "thresholds": {
+            "type": "object",
+            "properties": {
+              "skewness": {"type": "object"},
+              "cardinality": {"type": "object"},
+              "zipfian": {"type": "object"},
+              "data_size": {"type": "object"}
+            }
+          },
+          "description": {"type": "string"}
+        }
+      }
+    },
+    "benchmarks://results/{model}/{dataset_type}": {
+      "description": "Historical benchmark results",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "uri": {"type": "string"},
+          "type": {"type": "string", "const": "benchmark_results"},
+          "model_name": {"type": "string"},
+          "dataset_type": {"type": "string"},
+          "status": {
+            "type": "string",
+            "enum": ["available", "not_available"]
+          },
+          "results": {"type": "object"},
+          "message": {"type": "string"},
+          "description": {"type": "string"}
+        }
+      }
+    },
+    "guidelines://system-prompt": {
+      "description": "Active system prompt content",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "uri": {"type": "string"},
+          "type": {"type": "string", "const": "guidelines"},
+          "content": {"type": "string"},
+          "version": {"type": "string"},
+          "prompt_id": {"type": "string"},
+          "created_at": {"type": "string"},
+          "description": {"type": "string"}
+        }
+      }
+    }
+  }
+}

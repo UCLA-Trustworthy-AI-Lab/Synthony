@@ -221,7 +221,7 @@ class TestRecommendationEngine:
         if engine.system_prompt_loaded:
             assert engine.system_prompt is not None
             assert len(engine.system_prompt) > 0
-            assert engine.system_prompt_path.name == "SystemPrompt_v2.md"
+            assert engine.system_prompt_path.name == "SystemPrompt_v3.md"
 
     def test_systemprompt_custom_path(self, tmp_path):
         """SystemPrompt should load from custom path."""

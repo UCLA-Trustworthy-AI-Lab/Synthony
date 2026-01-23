@@ -1,0 +1,39 @@
+# ============================================================
+# Synthony - Production Requirements
+# ============================================================
+# Install: pip install -r requirements.txt
+# For development: pip install -e ".[dev]"
+# For MCP server: pip install -r requirements.txt (includes mcp)
+# ============================================================
+
+# Core Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+pyarrow>=12.0.0
+scikit-learn>=1.3.0
+
+# Data Validation & Serialization
+pydantic>=2.0.0
+
+# MCP Server Protocol
+mcp>=0.9.0
+
+# LLM Integration (for recommendation engine)
+openai>=1.10.0
+
+# Database & Configuration
+sqlalchemy>=2.0.0
+python-dotenv>=1.0.0
+
+# Optional High-Performance Alternative (commented out by default)
+# polars>=0.19.0
+
+# Optional CLI Tools (commented out by default)
+# typer>=0.9.0
+# rich>=13.0.0
+
+# Optional API Server (commented out by default)
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6

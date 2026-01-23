@@ -205,7 +205,7 @@ async def analyze_dataset(
         return AnalysisResponse(
             session_id=session_id,
             analysis_id=analysis.analysis_id,
-            dataset_id=dataset_id,
+            dataset_id=dataset.dataset_id,
             dataset_profile=profile_dict,
             column_analysis=column_dict,
             message=f"Analysis completed: {dataset_profile.row_count} rows × {dataset_profile.column_count} columns",
@@ -274,10 +274,12 @@ async def recommend_model(request: RecommendationRequest = Body(...)):
             column_analysis = ColumnAnalysisResult(**json.loads(analysis.column_analysis_json)) if analysis.column_analysis_json else None
 
         # Mode 2: Use provided profile
-        elif request.dataset_profile:
+        elif request.dataset_profile or request.dataset_profile_id:
             # Convert dictionaries to Pydantic objects if needed
             if isinstance(request.dataset_profile, dict):
                 dataset_profile = DatasetProfile(**request.dataset_profile)
+            elif isinstance(request.dataset_profile_id, str):
+                dataset_profile = get_dataset_profile(request.dataset_profile_id)
             else:
                 dataset_profile = request.dataset_profile
 
@@ -290,7 +292,7 @@ async def recommend_model(request: RecommendationRequest = Body(...)):
         else:
             raise HTTPException(
                 status_code=400,
-                detail="Either 'analysis_id' or 'dataset_profile' must be provided"
+                detail="Either 'analysis_id' or 'dataset_profile_id' must be provided"
             )
 
         # Run recommendation
@@ -313,7 +315,8 @@ async def recommend_model(request: RecommendationRequest = Body(...)):
 async def analyze_and_recommend(
     request: Request = None,
     file: UploadFile = File(default=None),
-    dataset_id: Optional[str] = Query(None, description="Dataset identifier (for reusing existing analysis or new upload)"),
+    dataset_id: Optional[str] = Query(None, description="Dataset identifier (for naming a new upload)"),
+    dataset_profile_id: Optional[str] = Query(None, description="Existing dataset profile ID to use (previously analyzed)"),
     method: RecommendationMethod = Query(
         RecommendationMethod.hybrid, description="Recommendation method"
     ),
@@ -326,11 +329,11 @@ async def analyze_and_recommend(
 
     **Two modes**:
     1. **New upload**: Provide `file` (with optional `dataset_id` for naming)
-    2. **Existing dataset**: Provide `dataset_id` only (reuses stored analysis)
+    2. **Existing dataset**: Provide `dataset_profile_id` only (reuses stored analysis)
 
     **Process**:
     1. If file provided: Upload and analyze
-    2. If dataset_id only: Retrieve from database
+    2. If dataset_profile_id provided: Retrieve from database
     3. Apply constraints
     4. Generate recommendations
     5. Return combined result
@@ -340,78 +343,97 @@ async def analyze_and_recommend(
     if not analyzer or not column_analyzer or not recommender:
         raise HTTPException(status_code=503, detail="Services not initialized")
 
-    # Treat empty file uploads as None (handles both omitted and empty form fields)
-    if file and (not file.filename or file.filename == ""):
-        file = None
+    try:
+        # Treat empty file uploads as None (handles both omitted and empty form fields)
+        if file and (not file.filename or file.filename == ""):
+            file = None
 
-    # Validate input: must have either file or dataset_id
-    if not file and not dataset_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Either 'file' (for new upload) or 'dataset_id' (for existing data) must be provided"
-        )
-
-    # Mode 1: New file upload
-    if file:
-        # Step 1: Analyze dataset (will create new entry or update existing if dataset_id provided)
-        analysis_response = await analyze_dataset(file=file, dataset_id=dataset_id, request=request)
-
-    # Mode 2: Use existing dataset
-    else:
-        # Retrieve existing analysis from database
-        analysis = get_analysis_by_dataset(dataset_id)
-
-        if not analysis:
+        # Validate input: must have either file or dataset_profile_id
+        if not file and not dataset_profile_id:
             raise HTTPException(
-                status_code=404,
-                detail=f"No analysis found for dataset_id '{dataset_id}'. Please upload the dataset first using /analyze endpoint."
+                status_code=400,
+                detail="Either 'file' (for new upload) or 'dataset_profile_id' (for existing data) must be provided"
             )
 
-        # Deserialize stored analysis
-        profile_dict = json.loads(analysis.profile_json)
-        column_dict = json.loads(analysis.column_analysis_json)
+        # Mode 1: New file upload
+        if file:
+            # Step 1: Analyze dataset (will create new entry or update existing if dataset_id provided)
+            # Pass dataset_id only if it's meant for naming the new upload
+            analysis_response = await analyze_dataset(file=file, dataset_id=dataset_id, request=request)
 
-        # Get session_id from dataset
-        dataset = get_dataset(dataset_id)
-        session_id = dataset.session_id if dataset else None
+        # Mode 2: Use existing dataset
+        elif dataset_profile_id:
+            # Retrieve existing analysis from database
+            # Note: In current schema, dataset_id is often used as the key. 
+            # We map dataset_profile_id to the lookups expected by get_analysis_by_dataset
+            analysis = get_analysis_by_dataset(dataset_profile_id)
 
-        # Create response object matching analyze_dataset output
-        analysis_response = AnalysisResponse(
-            session_id=session_id,
-            analysis_id=analysis.analysis_id,
-            dataset_id=dataset_id,
-            dataset_profile=profile_dict,
-            column_analysis=column_dict,
-            message=f"Using cached analysis from {analysis.created_at.isoformat()}"
+            if not analysis:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No analysis found for dataset_profile_id '{dataset_profile_id}'. Please upload the dataset first using /analyze endpoint."
+                )
+
+            # Deserialize stored analysis
+            try:
+                profile_dict = json.loads(analysis.profile_json)
+                column_dict = json.loads(analysis.column_analysis_json)
+            except json.JSONDecodeError as e:
+                raise HTTPException(status_code=500, detail=f"Failed to decode stored analysis data: {str(e)}")
+
+            # Get session_id from dataset
+            dataset = get_dataset(dataset_profile_id)
+            session_id = dataset.session_id if dataset else None
+
+            # Create response object matching analyze_dataset output
+            analysis_response = AnalysisResponse(
+                session_id=session_id,
+                analysis_id=analysis.analysis_id,
+                dataset_id=dataset_profile_id,
+                dataset_profile=profile_dict,
+                column_analysis=column_dict,
+                message=f"Using cached analysis from {analysis.created_at.isoformat()}"
+            )
+
+        # Step 2: Build constraints
+        constraints = {
+            "cpu_only": cpu_only,
+            "strict_dp": strict_dp,
+        }
+
+        # Step 3: Recommend models
+        recommendation_request = RecommendationRequest(
+            dataset_id=analysis_response.dataset_id,
+            dataset_profile=analysis_response.dataset_profile,
+            column_analysis=analysis_response.column_analysis,
+            constraints=constraints,
+            method=method,
+            top_n=top_n,
         )
 
-    # Step 2: Build constraints
-    constraints = {
-        "cpu_only": cpu_only,
-        "strict_dp": strict_dp,
-    }
+        recommendation_result = await recommend_model(request=recommendation_request)
 
-    # Step 3: Recommend models
-    recommendation_request = RecommendationRequest(
-        dataset_id=analysis_response.dataset_id,
-        dataset_profile=analysis_response.dataset_profile,
-        column_analysis=analysis_response.column_analysis,
-        constraints=constraints,
-        method=method,
-        top_n=top_n,
-    )
+        # Step 4: Combine results
+        return {
+            "dataset_id": analysis_response.dataset_id,
+            "analysis": {
+                "dataset_profile": analysis_response.dataset_profile,
+                "column_analysis": analysis_response.column_analysis,
+            },
+            "recommendation": recommendation_result,
+        }
 
-    recommendation_result = await recommend_model(request=recommendation_request)
-
-    # Step 4: Combine results
-    return {
-        "dataset_id": analysis_response.dataset_id,
-        "analysis": {
-            "dataset_profile": analysis_response.dataset_profile,
-            "column_analysis": analysis_response.column_analysis,
-        },
-        "recommendation": recommendation_result,
-    }
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        # Catch unexpected errors and return meaningful 500
+        # In a real app, we might log the full traceback here
+        error_msg = str(e)
+        raise HTTPException(
+            status_code=500, 
+            detail=f"An unexpected error occurred during analysis and recommendation: {error_msg}"
+        )
 
 
 @router.get("/models", response_model=Dict[str, Any])

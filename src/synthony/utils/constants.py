@@ -2,12 +2,20 @@
 Configuration constants and thresholds for data stress detection.
 
 All threshold values are based on empirical research and documented in:
-- docs/architecture_v2.md
-- docs/SystemPrompt_v2.md
+- docs/architecture_v3.md
+- docs/SystemPrompt_v3.md
 """
 
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict
+
+
+# Data directory configuration
+# Override with SYNTHONY_DATA_DIR environment variable
+DATA_DIR = Path(os.environ.get("SYNTHONY_DATA_DIR", "dataset/input_data"))
+"""Default directory for dataset discovery. Configurable via SYNTHONY_DATA_DIR env var."""
 
 
 @dataclass

@@ -43,7 +43,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application code
 COPY src/ ./src/
-COPY docs/SystemPrompt_v2.md ./docs/SystemPrompt_v2.md
+COPY docs/SystemPrompt_v3.md ./docs/SystemPrompt_v3.md
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash appuser && \
@@ -55,7 +55,7 @@ USER appuser
 ENV API_HOST=0.0.0.0 \
     API_PORT=8000 \
     API_WORKERS=2 \
-    SYNTHONY_SYSTEM_PROMPT=/app/docs/SystemPrompt_v2.md \
+    SYNTHONY_SYSTEM_PROMPT=/app/docs/SystemPrompt_v3.md \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
@@ -68,4 +68,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Entrypoint
 CMD ["python", "-m", "uvicorn", "synthony.api.server:app", \
-     "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

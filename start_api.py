@@ -93,8 +93,8 @@ def display_config():
             print(f"✓ Custom SystemPrompt: {system_prompt}")
         else:
             print(f"✗ Custom SystemPrompt not found: {system_prompt}")
-    elif Path("docs/SystemPrompt_v2.md").exists():
-        print("✓ Using default SystemPrompt: docs/SystemPrompt_v2.md")
+    elif Path("docs/SystemPrompt_v3.md").exists():
+        print("✓ Using default SystemPrompt: docs/SystemPrompt_v3.md")
     else:
         print("⚠️  SystemPrompt file not found")
     print()

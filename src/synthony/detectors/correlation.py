@@ -112,8 +112,10 @@ class CorrelationDetector:
         # Calculate matrix density
         # Create boolean mask for correlations above threshold
         mask = np.abs(corr_matrix) > self.correlation_threshold
-        # Exclude diagonal (self-correlation)
-        np.fill_diagonal(mask.values, False)
+        # Exclude diagonal (self-correlation) - make a copy to avoid read-only error
+        mask_array = mask.values.copy()
+        np.fill_diagonal(mask_array, False)
+        mask = pd.DataFrame(mask_array, index=mask.index, columns=mask.columns)
 
         # Count dense pairs (divide by 2 since matrix is symmetric)
         total_pairs = (len(corr_matrix) * (len(corr_matrix) - 1)) / 2

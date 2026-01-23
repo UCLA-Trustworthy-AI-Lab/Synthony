@@ -3,7 +3,7 @@
 Test LLM mode with SystemPrompt loading.
 
 This test demonstrates:
-1. SystemPrompt is loaded from docs/SystemPrompt_v2.md
+1. SystemPrompt is loaded from docs/SystemPrompt_v3.md
 2. LLM mode uses the SystemPrompt for better recommendations
 3. Hybrid mode combines rule-based + LLM with SystemPrompt
 """
@@ -128,7 +128,7 @@ print(f"Hybrid:      {rec_hybrid['model_name']:<15} (confidence: {rec_hybrid['co
 print("\n6️⃣  Testing with Abalone dataset (different characteristics)")
 print("-" * 80)
 
-with open("/Users/hochan.son/Project/Synthony/dataset/input_data/abalone.csv", "rb") as f:
+with open("", "rb") as f:
     response = requests.post(
         f"{BASE_URL}/analyze-and-recommend",
         params={
@@ -160,7 +160,7 @@ print("\n" + "=" * 80)
 print("✅ SystemPrompt Integration Test Complete!")
 print("=" * 80)
 print("\nKey Points:")
-print("  1. SystemPrompt loaded from: docs/SystemPrompt_v2.md")
+print("  1. SystemPrompt loaded from: docs/SystemPrompt_v3.md")
 print("  2. LLM mode uses SystemPrompt for contextual recommendations")
 print("  3. Hybrid mode combines rule-based + LLM with SystemPrompt")
 print("  4. All methods provide detailed reasoning")

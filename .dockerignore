@@ -26,6 +26,9 @@ ENV/
 .git/
 .gitignore
 
+# SQLite database
+data/synthony.db
+
 # Environment files (secrets)
 .env
 .env.*
@@ -45,7 +48,10 @@ output/
 
 # Documentation (except SystemPrompt)
 docs/
+!docs/SystemPrompt_v1.md
 !docs/SystemPrompt_v2.md
+!docs/SystemPrompt_v3.md
+
 
 # Tests (not needed in production image)
 tests/
