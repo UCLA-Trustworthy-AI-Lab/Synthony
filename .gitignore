@@ -13,6 +13,9 @@ __pycache__/
 docs/*.md
 docs/**/*
 
+# frontend
+frontend/*
+
 # Distribution / packaging
 .Python
 build/
