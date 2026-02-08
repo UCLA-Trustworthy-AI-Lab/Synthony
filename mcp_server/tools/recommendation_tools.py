@@ -45,7 +45,7 @@ class RecommendationTools:
                 description=(
                     "Rank synthesis models using hybrid rule-based + LLM approach. "
                     "Process: "
-                    "1. Apply hard filters (cpu_only, strict_dp, data_size) "
+                    "1. Apply row-count filters "
                     "2. Detect stress factors (skew>2.0, cardinality>500, zipfian>0.05) "
                     "3. Score models 0-4 on capabilities (skew, cardinality, zipfian, privacy) "
                     "4. Apply tie-breaking rules if top models within 5% "
@@ -62,22 +62,6 @@ class RecommendationTools:
                         "column_analysis": {
                             "type": "object",
                             "description": "Optional column-level analysis for enhanced recommendations"
-                        },
-                        "constraints": {
-                            "type": "object",
-                            "properties": {
-                                "cpu_only": {
-                                    "type": "boolean",
-                                    "description": "CPU-only constraint",
-                                    "default": False
-                                },
-                                "strict_dp": {
-                                    "type": "boolean",
-                                    "description": "Strict differential privacy requirement",
-                                    "default": False
-                                }
-                            },
-                            "description": "Hard constraints for model filtering"
                         },
                         "method": {
                             "type": "string",
@@ -101,7 +85,7 @@ class RecommendationTools:
                 description=(
                     "Rank synthesis models using ONLY rule-based approach (pure Python, no LLM). "
                     "Process: "
-                    "1. Apply hard filters (cpu_only, strict_dp, data_size) "
+                    "1. Apply row-count filters "
                     "2. Detect stress factors (skew>2.0, cardinality>500, zipfian>0.05) "
                     "3. Score models 0-4 on capabilities using model_capabilities.json "
                     "4. Apply tie-breaking rules if top models within 5% "
@@ -118,22 +102,6 @@ class RecommendationTools:
                         "column_analysis": {
                             "type": "object",
                             "description": "Optional column-level analysis for enhanced recommendations"
-                        },
-                        "constraints": {
-                            "type": "object",
-                            "properties": {
-                                "cpu_only": {
-                                    "type": "boolean",
-                                    "description": "CPU-only constraint",
-                                    "default": False
-                                },
-                                "strict_dp": {
-                                    "type": "boolean",
-                                    "description": "Strict differential privacy requirement",
-                                    "default": False
-                                }
-                            },
-                            "description": "Hard constraints for model filtering"
                         },
                         "top_n": {
                             "type": "integer",
@@ -154,7 +122,7 @@ class RecommendationTools:
                     "1. Build comprehensive prompt with dataset profile, column analysis, and SystemPrompt "
                     "2. Send to LLM for contextual reasoning about model suitability "
                     "3. Parse structured JSON response with model rankings and reasoning "
-                    "4. Validate against model registry constraints "
+                    "4. Validate against model registry row-count limits "
                     "More nuanced than rule-based, captures complex dataset patterns. "
                     "Use when dataset has unusual characteristics that may need human-like reasoning."
                 ),
@@ -168,22 +136,6 @@ class RecommendationTools:
                         "column_analysis": {
                             "type": "object",
                             "description": "Optional column-level analysis for enhanced recommendations"
-                        },
-                        "constraints": {
-                            "type": "object",
-                            "properties": {
-                                "cpu_only": {
-                                    "type": "boolean",
-                                    "description": "CPU-only constraint",
-                                    "default": False
-                                },
-                                "strict_dp": {
-                                    "type": "boolean",
-                                    "description": "Strict differential privacy requirement",
-                                    "default": False
-                                }
-                            },
-                            "description": "Hard constraints for model filtering"
                         },
                         "top_n": {
                             "type": "integer",
@@ -217,11 +169,6 @@ class RecommendationTools:
                         "dataset_profile": {
                             "type": "object",
                             "description": "Dataset stress profile for tie-breaking context"
-                        },
-                        "prefer_speed": {
-                            "type": "boolean",
-                            "description": "Whether to prioritize faster models",
-                            "default": False
                         }
                     },
                     "required": ["tied_models", "dataset_profile"]
@@ -285,7 +232,6 @@ class RecommendationTools:
             arguments: {
                 "dataset_profile": dict,
                 "column_analysis": Optional[dict],
-                "constraints": Optional[dict],
                 "method": str,
                 "top_n": int
             }
@@ -302,8 +248,6 @@ class RecommendationTools:
         if arguments.get("column_analysis"):
             column_analysis = ColumnAnalysisResult(**arguments["column_analysis"])
 
-        # Get constraints
-        constraints = arguments.get("constraints", {})
         method = arguments.get("method", "hybrid")
         top_n = arguments.get("top_n", 3)
 
@@ -311,7 +255,6 @@ class RecommendationTools:
         result = self.recommender.recommend(
             dataset_profile=dataset_profile,
             column_analysis=column_analysis,
-            constraints=constraints,
             method=method,
             top_n=top_n
         )
@@ -327,7 +270,6 @@ class RecommendationTools:
             arguments: {
                 "dataset_profile": dict,
                 "column_analysis": Optional[dict],
-                "constraints": Optional[dict],
                 "top_n": int
             }
 
@@ -343,15 +285,12 @@ class RecommendationTools:
         if arguments.get("column_analysis"):
             column_analysis = ColumnAnalysisResult(**arguments["column_analysis"])
 
-        # Get constraints
-        constraints = arguments.get("constraints", {})
         top_n = arguments.get("top_n", 3)
 
         # Run recommendation with rule_based method
         result = self.recommender.recommend(
             dataset_profile=dataset_profile,
             column_analysis=column_analysis,
-            constraints=constraints,
             method="rule_based",
             top_n=top_n
         )
@@ -367,7 +306,6 @@ class RecommendationTools:
             arguments: {
                 "dataset_profile": dict,
                 "column_analysis": Optional[dict],
-                "constraints": Optional[dict],
                 "top_n": int
             }
 
@@ -383,15 +321,12 @@ class RecommendationTools:
         if arguments.get("column_analysis"):
             column_analysis = ColumnAnalysisResult(**arguments["column_analysis"])
 
-        # Get constraints
-        constraints = arguments.get("constraints", {})
         top_n = arguments.get("top_n", 3)
 
         # Run recommendation with llm method
         result = self.recommender.recommend(
             dataset_profile=dataset_profile,
             column_analysis=column_analysis,
-            constraints=constraints,
             method="llm",
             top_n=top_n
         )
@@ -406,8 +341,7 @@ class RecommendationTools:
         Args:
             arguments: {
                 "tied_models": List[str],
-                "dataset_profile": dict,
-                "prefer_speed": bool
+                "dataset_profile": dict
             }
 
         Returns:
@@ -419,7 +353,6 @@ class RecommendationTools:
         """
         tied_models = arguments["tied_models"]
         profile_dict = arguments["dataset_profile"]
-        prefer_speed = arguments.get("prefer_speed", False)
 
         dataset_profile = DatasetProfile(**profile_dict)
         row_count = dataset_profile.row_count
@@ -450,18 +383,12 @@ class RecommendationTools:
             reasoning = f"Dataset has {row_count} rows with severe skew, high cardinality, and zipfian distribution. TabDDPM is preferred over GReaT due to speed constraints on large datasets."
             rule_applied = "large_hard_problem_rule"
 
-        elif prefer_speed or row_count > 10000:
-            # Prefer faster models
-            speed_priority = ["TVAE", "ARF", "GaussianCopula", "CTGAN", "TabSyn", "TabDDPM", "GReaT"]
-            winner = next((m for m in speed_priority if m in tied_models), tied_models[0])
-            reasoning = f"Among tied models, {winner} offers better speed/quality trade-off for {row_count} rows."
-            rule_applied = "speed_priority_rule"
-
         else:
-            # Default: Use first in list (highest score)
-            winner = tied_models[0]
-            reasoning = f"Models are closely matched. Defaulting to {winner} based on overall capability score."
-            rule_applied = "default_rule"
+            # Default: quality-focused models
+            quality_priority = ["TabDDPM", "TabSyn", "AutoDiff"]
+            winner = next((m for m in quality_priority if m in tied_models), tied_models[0])
+            reasoning = f"Models are closely matched. Defaulting to {winner} based on overall quality."
+            rule_applied = "quality_default_rule"
 
         return {
             "winner": winner,
