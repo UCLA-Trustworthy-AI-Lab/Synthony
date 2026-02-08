@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange.svg)]()
 
-Synthony is an intelligent recommendation platform that analyzes your tabular dataset's characteristics and recommends the optimal synthetic data generation model from 13+ state-of-the-art options. Like a symphony conductor orchestrating instruments, Synthony orchestrates the right model for your data.
+Synthony is an intelligent recommendation platform that analyzes your tabular dataset's characteristics and recommends the optimal synthetic data generation model from 15 state-of-the-art options. Like a symphony conductor orchestrating instruments, Synthony orchestrates the right model for your data.
 
 ## Why Synthony?
 
@@ -35,7 +35,7 @@ Synthony solves this by:
 
 ### Model Recommendation
 
-- **13+ SOTA Models** — TabDDPM, TabSyn, AutoDiff, GReaT, TVAE, CTGAN, PATE-CTGAN, DPCART, AIM, GaussianCopula, ARF
+- **15 SOTA Models** — CART, SMOTE, BayesianNetwork, ARF, NFlow, TVAE, TabDDPM, AutoDiff, AIM, DPCART, PATECTGAN, TabSyn, CTGAN, GReaT, Identity
 - **Constraint Support** — CPU-only, differential privacy requirements
 - **Hybrid Engine** — Rule-based scoring + LLM reasoning
 - **Explainable Results** — Clear reasoning for every recommendation
@@ -192,16 +192,20 @@ Synthony identifies data characteristics that break traditional models:
 
 ### 2. Model Scoring
 
-Each model is scored 0-4 on capability dimensions:
+Each model is scored 0-4 on capability dimensions (calibrated from spark benchmarks v7.0.0):
 
-| Model | Skew | Cardinality | Zipfian | Small Data | Privacy |
-|-------|------|-------------|---------|------------|---------|
-| GReaT | 4 | 4 | 4 | 2 | 0 |
-| TabDDPM | 3 | 2 | 2 | 2 | 0 |
-| TabSyn | 3 | 3 | 3 | 2 | 0 |
-| ARF | 2 | 3 | 3 | 4 | 0 |
-| TVAE | 1 | 2 | 1 | 3 | 0 |
-| PATE-CTGAN | 1 | 2 | 1 | 2 | 4 |
+| Model | Type | Skew | Cardinality | Zipfian | Small Data | Correlation | Privacy | Quality |
+|-------|------|------|-------------|---------|------------|-------------|---------|---------|
+| CART | Tree | 3 | 4 | 2 | 4 | 4 | 0 | 0.981 |
+| SMOTE | Statistical | 3 | 4 | 2 | 4 | 4 | 0 | 0.979 |
+| BayesianNetwork | Statistical | 3 | 4 | 2 | 4 | 3 | 0 | 0.971 |
+| ARF | Tree | 2 | 4 | 3 | 4 | 4 | 0 | 0.962 |
+| NFlow | Flow | 2 | 4 | 2 | 4 | 1 | 0 | 0.915 |
+| TVAE | VAE | 2 | 4 | 1 | 3 | 4 | 0 | 0.865 |
+| DPCART | Tree+DP | 2 | 0 | 2 | 2 | 3 | 3 | 0.759 |
+| TabDDPM | Diffusion | 1 | 2 | 2 | 2 | 3 | 0 | 0.697 |
+| AIM | Stat+DP | 3 | 0 | 1 | 2 | 3 | 4 | 0.540 |
+| PATECTGAN | GAN+DP | 0 | 4 | 2 | 1 | 0 | 4 | 0.455 |
 
 ### 3. Constraint Filtering
 
@@ -286,7 +290,7 @@ BenchmarkDatasetGenerator.save_benchmarks("./benchmarks")
 │  └──────────────┘    └──────────────┘    └──────────────┘       │
 │                                                                  │
 ├─────────────────────────────────────────────────────────────────┤
-│  Model Registry (13+ SOTA models with capability scores)        │
+│  Model Registry (15 SOTA models with capability scores v7.0.0)  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

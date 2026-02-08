@@ -17,6 +17,7 @@ from datetime import datetime
 
 import numpy as np
 
+capabilities_version = "1.0"
 
 # Model metadata (static properties not derived from benchmarks)
 MODEL_METADATA = {
@@ -277,6 +278,32 @@ def calculate_small_data_score(benchmark: dict) -> Optional[int]:
     return metric_to_score(quality)
 
 
+def calculate_privacy_score(benchmark: dict) -> Optional[int]:
+    """Calculate empirical privacy score from benchmark privacy metrics.
+
+    Uses the composite privacy_score (0-1) from the benchmark, which combines
+    average minimum distance ratio and duplicate rate:
+        privacy_score = min(1.0, avg_min_dist) * (1 - duplicate_rate)
+
+    Falls back to dcr (Distance to Closest Record) if privacy_score is absent.
+    Returns None when no privacy metrics are available.
+    """
+    privacy = benchmark.get("privacy", {})
+    if not privacy:
+        return None
+
+    score = privacy.get("privacy_score")
+    if score is not None:
+        return metric_to_score(float(score))
+
+    # Fallback: use DCR if privacy_score is missing
+    dcr = privacy.get("dcr")
+    if dcr is not None:
+        return metric_to_score(float(dcr))
+
+    return None
+
+
 def calculate_overall_quality(benchmark: dict) -> Optional[int]:
     """Calculate overall quality score."""
     quality = benchmark.get("overall_quality_score", 0)
@@ -359,7 +386,24 @@ def calculate_empirical_stats(benchmarks: list[dict]) -> dict:
                 pres = (pres + fid_corr) / 2
             corr_rates.append(min(pres, 1.0))
 
-    return {
+    # Privacy metrics from benchmarks
+    privacy_scores = []
+    dcr_values = []
+    duplicate_rates = []
+    for b in benchmarks:
+        privacy = b.get("privacy", {})
+        if privacy:
+            ps = privacy.get("privacy_score")
+            if ps is not None:
+                privacy_scores.append(float(ps))
+            dcr = privacy.get("dcr")
+            if dcr is not None:
+                dcr_values.append(float(dcr))
+            dup = privacy.get("duplicate_rate")
+            if dup is not None:
+                duplicate_rates.append(float(dup))
+
+    result = {
         "avg_quality_score": round(float(np.mean(quality_scores)), 3) if quality_scores else 0.0,
         "avg_fidelity": round(float(np.mean(fidelity_scores)), 3) if fidelity_scores else 0.0,
         "avg_utility": round(float(np.mean(utility_scores)), 3) if utility_scores else 0.0,
@@ -368,6 +412,15 @@ def calculate_empirical_stats(benchmarks: list[dict]) -> dict:
         "correlation_preservation": round(float(np.mean(corr_rates)), 3) if corr_rates else 0.0,
         "datasets_tested": len(benchmarks),
     }
+
+    if privacy_scores:
+        result["avg_privacy_score"] = round(float(np.mean(privacy_scores)), 3)
+    if dcr_values:
+        result["avg_dcr"] = round(float(np.mean(dcr_values)), 3)
+    if duplicate_rates:
+        result["avg_duplicate_rate"] = round(float(np.mean(duplicate_rates)), 3)
+
+    return result
 
 
 def generate_capabilities(benchmark_dir: Path, source_label: str = "spark") -> dict:
@@ -397,12 +450,12 @@ def generate_capabilities(benchmark_dir: Path, source_label: str = "spark") -> d
             print(f"Error loading {file}: {e}")
 
     # Load existing v6 config to preserve metadata fields
-    v6_config_path = Path("config/model_capabilities.json")
-    v6_models = {}
-    if v6_config_path.exists():
-        with open(v6_config_path) as f:
-            v6_data = json.load(f)
-        v6_models = v6_data.get("models", {})
+    config_path = Path("config/model_capabilities.json")
+    models = {}
+    if config_path.exists():
+        with open(config_path) as f:
+            data = json.load(f)
+        models = data.get("models", {})
 
     # Calculate capabilities for each model
     models = {}
@@ -420,6 +473,17 @@ def generate_capabilities(benchmark_dir: Path, source_label: str = "spark") -> d
         corr_scores = [calculate_correlation_handling(b) for b in benchmarks]
         small_scores = [calculate_small_data_score(b) for b in benchmarks]
         quality_scores = [calculate_overall_quality(b) for b in benchmarks]
+        privacy_scores = [calculate_privacy_score(b) for b in benchmarks]
+
+        # Determine privacy_dp: use empirical score if available, else static metadata
+        has_empirical_privacy = any(s is not None for s in privacy_scores)
+        if has_empirical_privacy:
+            empirical_privacy = aggregate_scores(privacy_scores)
+            # For models with a known DP mechanism, use the higher of
+            # the static DP rating and the empirical privacy score
+            privacy_dp = max(metadata["privacy_dp"], empirical_privacy)
+        else:
+            privacy_dp = metadata["privacy_dp"]
 
         # Aggregate scores
         capabilities = {
@@ -428,14 +492,14 @@ def generate_capabilities(benchmark_dir: Path, source_label: str = "spark") -> d
             "zipfian_handling": 2,  # Default - needs specific benchmark
             "small_data": aggregate_scores(small_scores) if any(s is not None for s in small_scores) else 2,
             "correlation_handling": aggregate_scores(corr_scores),
-            "privacy_dp": metadata["privacy_dp"],
+            "privacy_dp": privacy_dp,
         }
 
         # Preserve zipfian_handling from v6 if available
-        v6_entry = v6_models.get(model_name, {})
-        v6_caps = v6_entry.get("capabilities", {})
-        if "zipfian_handling" in v6_caps:
-            capabilities["zipfian_handling"] = v6_caps["zipfian_handling"]
+        entry = models.get(model_name, {})
+        caps = entry.get("capabilities", {})
+        if "zipfian_handling" in caps:
+            capabilities["zipfian_handling"] = caps["zipfian_handling"]
 
         # Calculate empirical statistics
         empirical = calculate_empirical_stats(benchmarks)
@@ -455,7 +519,7 @@ def generate_capabilities(benchmark_dir: Path, source_label: str = "spark") -> d
                 "max_recommended_rows": metadata["max_rows"],
                 "min_rows": metadata["min_rows"],
             },
-            "performance": v6_entry.get("performance", {
+            "performance": entry.get("performance", {
                 "training_speed": "moderate",
                 "inference_speed": "moderate",
                 "memory_usage": "moderate",
@@ -465,20 +529,20 @@ def generate_capabilities(benchmark_dir: Path, source_label: str = "spark") -> d
         }
 
         # Preserve v6 descriptive fields or set defaults
-        if v6_entry:
-            if "class_path" in v6_entry:
-                model_entry["class_path"] = v6_entry["class_path"]
-            if "description" in v6_entry:
-                model_entry["description"] = v6_entry["description"]
-            if "strengths" in v6_entry:
-                model_entry["strengths"] = v6_entry["strengths"]
-            if "limitations" in v6_entry:
-                model_entry["limitations"] = v6_entry["limitations"]
-            if "exclude" in v6_entry:
-                model_entry["exclude"] = v6_entry["exclude"]
+        if entry:
+            if "class_path" in entry:
+                model_entry["class_path"] = entry["class_path"]
+            if "description" in entry:
+                model_entry["description"] = entry["description"]
+            if "strengths" in entry:
+                model_entry["strengths"] = entry["strengths"]
+            if "limitations" in entry:
+                model_entry["limitations"] = entry["limitations"]
+            if "exclude" in entry:
+                model_entry["exclude"] = entry["exclude"]
             # Preserve trial4 empirical if it exists
-            if "trial4_empirical" in v6_entry:
-                model_entry["trial4_empirical"] = v6_entry["trial4_empirical"]
+            if "trial4_empirical" in entry:
+                model_entry["trial4_empirical"] = entry["trial4_empirical"]
 
         # Ensure required fields always exist
         if "strengths" not in model_entry:
@@ -496,10 +560,10 @@ def generate_capabilities(benchmark_dir: Path, source_label: str = "spark") -> d
     for model_name, metadata in MODEL_METADATA.items():
         if model_name not in models:
             print(f"No benchmarks found for {model_name}, using v6 config or defaults")
-            v6_entry = v6_models.get(model_name, {})
-            if v6_entry:
-                models[model_name] = v6_entry
-                models[model_name]["capabilities_source"] = v6_entry.get("capabilities_source", "literature")
+            entry = models.get(model_name, {})
+            if entry:
+                models[model_name] = entry
+                models[model_name]["capabilities_source"] = entry.get("capabilities_source", "literature")
             else:
                 models[model_name] = {
                     "name": model_name,

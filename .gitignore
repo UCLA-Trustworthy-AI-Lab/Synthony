@@ -14,6 +14,7 @@ evaluation_metrics/*
 
 # Documentation builds
 docs/_build/
+docs/
 
 # Secrets - never commit API keys
 baselines/api_key.json

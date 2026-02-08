@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Synthony** is an intelligent orchestration platform that recommends the optimal synthetic tabular data generation model from 13+ SOTA models based on dataset characteristics. It analyzes data "stress factors" (skewness, cardinality, Zipfian distributions) and matches them to model capabilities using a hybrid rule-based + LLM decision engine.
+**Synthony** is an intelligent orchestration platform that recommends the optimal synthetic tabular data generation model from 15 SOTA models based on dataset characteristics. It analyzes data "stress factors" (skewness, cardinality, Zipfian distributions) and matches them to model capabilities using a hybrid rule-based + LLM decision engine.
 
 ## Common Commands
 
@@ -116,13 +116,14 @@ Defined in `src/synthony/utils/constants.py`:
 
 ### Model Registry
 
-`config/model_capabilities.json` (v6.0.0) tracks 17 models with 0-4 capability scores calibrated from trial4 benchmarks:
+`config/model_capabilities.json` (v7.0.0) tracks 15 models with 0-4 capability scores calibrated from spark benchmarks (10 datasets, 14 models) with density-normalized cardinality scoring:
 - **Diffusion**: TabDDPM, TabSyn, AutoDiff
-- **LLM/Transformer**: GReaT, LTM_VAE
+- **LLM/Transformer**: GReaT
 - **GAN**: CTGAN, PATECTGAN
 - **VAE**: TVAE
 - **Tree-based**: ARF, CART, DPCART
 - **Statistical**: BayesianNetwork, NFlow, SMOTE, AIM
+- **Baseline**: Identity
 
 ## Environment Variables
 

@@ -70,7 +70,7 @@ These are the most significant capability changes — be aware when comparing to
 |--------|----------------|-------------|--------|
 | **Correlation dramatically improved** | TVAE (0→4), ARF (1→4), SMOTE (2→4), CART (2→4) | Trial4 underestimated correlation preservation | Correlation-sensitive tasks now have many strong options |
 | **Cardinality broadly improved** | Many models 3→4 | Density normalization fixed sampling bias | Most models handle high cardinality well |
-| **Small data improved** | BN (2→4), CART (2→4), NFlow (2→4), SMOTE (2→4) | More datasets gave better small-data signal | More options for small datasets |
+| **Small data improved** | BayesianNetwork (2→4), CART (2→4), NFlow (2→4), SMOTE (2→4) | More datasets gave better small-data signal | More options for small datasets |
 | **Skew decreased for some** | TabDDPM (3→1), NFlow (4→2), ARF (3→2) | Trial4 overestimated skew preservation | Fewer models handle severe skew well |
 | **New active models** | CTGAN, TabSyn, PATECTGAN | Now have spark benchmark data | More options, especially GPU/DP |
 
@@ -190,27 +190,27 @@ Return strictly JSON:
 
 | Use Case | Best Models | Avoid |
 |----------|-------------|-------|
-| **Small data (<500 rows)** | ARF (4), CART (4), BN (4), SMOTE (4), NFlow (4) | PATECTGAN (1), TabDDPM (2), AutoDiff (2) |
+| **Small data (<500 rows)** | ARF (4), CART (4), BayesianNetwork (4), SMOTE (4), NFlow (4) | PATECTGAN (1), TabDDPM (2), AutoDiff (2) |
 | **Large data (>50k rows)** | CART, SMOTE, ARF | BayesianNetwork (50k max) |
-| **Severe skew (>2.0)** | BN/CART/SMOTE/AIM (3) | PATECTGAN (0), TabDDPM/AutoDiff/CTGAN (1) |
-| **High cardinality (>500)** | CART/SMOTE/BN/ARF/TVAE/NFlow/CTGAN/TabSyn/PATECTGAN (4) | AIM (0), DPCART (0) |
+| **Severe skew (>2.0)** | BayesianNetwork/CART/SMOTE/AIM (3) | PATECTGAN (0), TabDDPM/AutoDiff/CTGAN (1) |
+| **High cardinality (>500)** | CART/SMOTE/BayesianNetwork/ARF/TVAE/NFlow/CTGAN/TabSyn/PATECTGAN (4) | AIM (0), DPCART (0) |
 | **Zipfian distribution** | ARF/TabSyn (3) | AIM/TVAE (1) |
-| **Correlation-sensitive** | ARF/CART/TVAE/SMOTE (4), BN/CTGAN/TabDDPM/DPCART/AIM (3) | PATECTGAN (0), NFlow/AutoDiff (1) |
-| **CPU-only environment** | CART, SMOTE, BN, ARF, NFlow, CTGAN, DPCART, AIM | TabDDPM, AutoDiff, TVAE, TabSyn, PATECTGAN |
+| **Correlation-sensitive** | ARF/CART/TVAE/SMOTE (4), BayesianNetwork/CTGAN/TabDDPM/DPCART/AIM (3) | PATECTGAN (0), NFlow/AutoDiff (1) |
+| **CPU-only environment** | CART, SMOTE, BayesianNetwork, ARF, NFlow, CTGAN, DPCART, AIM | TabDDPM, AutoDiff, TVAE, TabSyn, PATECTGAN |
 | **Strict privacy (DP)** | AIM (dp=4), PATECTGAN (dp=4), DPCART (dp=3) | All non-DP models |
 | **Strict DP + CPU-only** | AIM (dp=4), DPCART (dp=3) | PATECTGAN (requires GPU) |
 | **Fast turnaround** | CART, ARF, SMOTE, DPCART | TabDDPM, AutoDiff |
-| **Best quality (no constraints)** | CART (0.981), SMOTE (0.979), BN (0.971), ARF (0.962) | AIM (0.540), PATECTGAN (0.455) |
+| **Best quality (no constraints)** | CART (0.981), SMOTE (0.979), BayesianNetwork (0.971), ARF (0.962) | AIM (0.540), PATECTGAN (0.455) |
 | **Best privacy/quality tradeoff** | DPCART (dp=3, quality=0.759) | AIM (dp=4, quality=0.540) |
 
 ## 8. TIE-BREAKING EXAMPLES
 
 ### Example 1: Small Data Tie
-**Input**: 100 rows, no stress factors, ARF/CART/BN/SMOTE all score equally
+**Input**: 100 rows, no stress factors, ARF/CART/BayesianNetwork/SMOTE all score equally
 ```json
 {
   "recommended_model": "ARF",
-  "reasoning": "TIE-BREAK: ARF, CART, BN, SMOTE scored equally (all small_data=4). Selected ARF for small data (100 rows < 500). Priority: ARF > CART > BayesianNetwork > SMOTE",
+  "reasoning": "TIE-BREAK: ARF, CART, BayesianNetwork, SMOTE scored equally (all small_data=4). Selected ARF for small data (100 rows < 500). Priority: ARF > CART > BayesianNetwork > SMOTE",
   "tie_break_applied": true,
   "tie_break_rule": "small_data_priority"
 }
@@ -221,7 +221,7 @@ Return strictly JSON:
 ```json
 {
   "recommended_model": "BayesianNetwork",
-  "reasoning": "BayesianNetwork has best skew_handling (3) among models with top cardinality (4). Quality=0.971. CART and SMOTE also score skew=3/card=4 but BN wins on tie-break quality priority.",
+  "reasoning": "BayesianNetwork has best skew_handling (3) among models with top cardinality (4). Quality=0.971. CART and SMOTE also score skew=3/card=4 but BayesianNetwork wins on tie-break quality priority.",
   "alternatives": [
     {"model": "CART", "score": 0.95},
     {"model": "SMOTE", "score": 0.93}
@@ -273,7 +273,7 @@ Always provide alternatives from the available pool. Never recommend excluded mo
 This prompt was validated against the abalone dataset (4,177 rows, severe_skew + high_cardinality):
 
 - **Recommender top-3**: BayesianNetwork, CART, SMOTE
-- **Actual trial4 top-4**: ARF (0.992), CART (0.991), BN (0.988), SMOTE (0.983)
+- **Actual trial4 top-4**: ARF (0.992), CART (0.991), BayesianNetwork (0.988), SMOTE (0.983)
 - **Overlap**: 3/3 (100%) — all recommended models are in the actual top tier
-- **Quality gap**: Recommended #1 (BN=0.988) is only 0.004 below actual #1 (ARF=0.992)
+- **Quality gap**: Recommended #1 (BayesianNetwork=0.988) is only 0.004 below actual #1 (ARF=0.992)
 - **Tier separation confirmed**: Top tier (>0.98) correctly separated from mid (0.87–0.94) and low (<0.60)
