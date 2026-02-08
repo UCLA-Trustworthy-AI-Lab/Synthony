@@ -4,7 +4,32 @@
     "last_updated": "2026-02-07",
     "source": "spark benchmarks (10 datasets, 14 models) + v6.0.0 metadata. Cardinality uses density-normalized formula.",
     "description": "Model capabilities derived from empirical benchmark results with row-count-normalized cardinality scoring.",
-    "compatible_models_count": 15
+    "compatible_models_count": 15,
+    "dp_threshold": 3,
+    "capability_thresholds": {
+      "skew_severe_boundary": 4.0,
+      "skew_high_required": 4,
+      "skew_moderate_required": 3,
+      "cardinality_severe_boundary": 5000,
+      "cardinality_high_required": 4,
+      "cardinality_moderate_required": 3,
+      "zipfian_severe_ratio": 0.9,
+      "zipfian_high_required": 4,
+      "zipfian_moderate_required": 3,
+      "small_data_required": 4,
+      "correlation_required": 3
+    },
+    "hard_problem_confidence": {
+      "primary": 0.95,
+      "fallback": 0.85,
+      "alternative": 0.70
+    },
+    "score_decay": {
+      "exact": 1.0,
+      "near": 0.7,
+      "moderate": 0.4,
+      "poor": 0.0
+    }
   },
   "models": {
     "CTGAN": {
@@ -58,7 +83,7 @@
         "Mode collapse risk on Zipfian data",
         "Not ideal for small data"
       ],
-      "exclude": true
+      "exclude": false
     },
     "DPCART": {
       "name": "DPCART",
@@ -237,7 +262,7 @@
         "Not optimal for extreme cases (score 3 vs 4)",
         "Not ideal for small data"
       ],
-      "exclude": true
+      "exclude": false
     },
     "ARF": {
       "name": "ARF",
@@ -713,7 +738,7 @@
         "Not a real synthesizer",
         "Should not be used in production"
       ],
-      "exclude": true,
+      "exclude": false,
       "trial4_empirical": {
         "avg_quality_score": 0.989,
         "avg_fidelity": 0.982,
@@ -889,7 +914,7 @@
         "Not suitable for large datasets (>10k rows in practice)",
         "Requires GPU (eliminates if cpu_only constraint)"
       ],
-      "exclude": true
+      "exclude": false
     }
   },
   "model_ranking_by_capability": {
@@ -952,6 +977,32 @@
       "BayesianNetwork",
       "ARF",
       "NFlow"
+    ],
+    "gpu_quality_priority": [
+      "GReaT",
+      "TabDDPM",
+      "TabSyn",
+      "AutoDiff",
+      "TVAE",
+      "PATECTGAN"
+    ],
+    "cpu_quality_priority": [
+      "CART",
+      "SMOTE",
+      "BayesianNetwork",
+      "ARF",
+      "NFlow"
+    ]
+  },
+  "hard_problem_routing": {
+    "primary": "GReaT",
+    "large_data_fallback": "TabDDPM",
+    "fallback_priority": [
+      "ARF",
+      "TabSyn",
+      "CART",
+      "SMOTE",
+      "BayesianNetwork"
     ]
   }
 }

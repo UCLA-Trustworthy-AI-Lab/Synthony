@@ -13,6 +13,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -76,7 +77,23 @@ class SynthonyMCPServer:
         # Initialize Synthony core components
         self.analyzer = StochasticDataAnalyzer()
         self.column_analyzer = ColumnAnalyzer()
-        self.recommender = ModelRecommendationEngine()
+
+        # Configure LLM from environment (same pattern as API server)
+        vllm_url = os.getenv("VLLM_URL")
+        if vllm_url:
+            openai_api_key = os.getenv("VLLM_API_KEY")
+            openai_base_url = vllm_url
+            openai_model = os.getenv("VLLM_MODEL") or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        else:
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            openai_base_url = os.getenv("OPENAI_URL")
+            openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+        self.recommender = ModelRecommendationEngine(
+            openai_api_key=openai_api_key,
+            openai_model=openai_model,
+            openai_base_url=openai_base_url,
+        )
 
         # Initialize MCP components
         self.data_tools = DataTools()

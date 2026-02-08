@@ -66,7 +66,7 @@ def display_config():
     vllm_key = os.getenv("VLLM_API_KEY")
     openai_url = os.getenv("OPENAI_URL", "https://api.openai.com/v1")
     openai_key = os.getenv("OPENAI_API_KEY")
-    openai_model = os.getenv("OPENAI_MODEL", "gpt-4o")
+    openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
     if vllm_url:
         vllm_key = os.getenv("VLLM_API_KEY")

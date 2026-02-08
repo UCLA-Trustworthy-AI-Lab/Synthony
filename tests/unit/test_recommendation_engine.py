@@ -137,14 +137,17 @@ class TestRecommendationEngine:
             top_n=3,
         )
 
-        # Should only recommend DP models
-        dp_models = {"PATE-CTGAN", "AIM", "DPCART"}
-        assert result.recommended_model.model_name.replace("PATECTGAN", "PATE-CTGAN") in dp_models
+        # Should only recommend models with privacy_dp >= dp_threshold from registry
+        dp_threshold = engine.config.dp_min_score
+        dp_models = {
+            name for name, info in engine.models.items()
+            if info["capabilities"]["privacy_dp"] >= dp_threshold
+        }
+        assert result.recommended_model.model_name in dp_models
 
         # Check alternatives are also DP models
-        dp_model_names = {"PATE-CTGAN", "PATECTGAN", "AIM", "DPCART"}
         for alt in result.alternative_models:
-            assert alt.model_name in dp_model_names
+            assert alt.model_name in dp_models
 
     def test_small_data_recommendation(self, small_data_profile):
         """Small data should prefer ARF or GaussianCopula."""
@@ -355,9 +358,14 @@ class TestRecommendationEngine:
             top_n=3,
         )
 
-        # Should only recommend CPU-compatible DP models
-        # Available options: PATE-CTGAN (GPU), AIM (CPU), DPCART (CPU)
-        assert result.recommended_model.model_name in {"AIM", "DPCART"}
+        # Should only recommend CPU-compatible DP models (derived from registry)
+        dp_threshold = engine.config.dp_min_score
+        cpu_dp_models = {
+            name for name, info in engine.models.items()
+            if info["capabilities"]["privacy_dp"] >= dp_threshold
+            and info["constraints"].get("cpu_only_compatible", False)
+        }
+        assert result.recommended_model.model_name in cpu_dp_models
 
 
 class TestWithRealData:

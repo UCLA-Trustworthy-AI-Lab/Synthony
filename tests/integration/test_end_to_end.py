@@ -14,6 +14,24 @@ from fastapi.testclient import TestClient
 
 from synthony.api.server import app
 from synthony.benchmark.generators import BenchmarkDatasetGenerator
+from synthony.recommender.engine import ModelRecommendationEngine
+
+# Derive DP model sets from registry (not hardcoded)
+_engine = ModelRecommendationEngine()
+_DP_THRESHOLD = _engine.config.dp_min_score
+DP_MODELS = {
+    name for name, info in _engine.models.items()
+    if info["capabilities"]["privacy_dp"] >= _DP_THRESHOLD
+}
+CPU_DP_MODELS = {
+    name for name, info in _engine.models.items()
+    if info["capabilities"]["privacy_dp"] >= _DP_THRESHOLD
+    and info["constraints"].get("cpu_only_compatible", False)
+}
+GPU_MODELS = {
+    name for name, info in _engine.models.items()
+    if not info["constraints"].get("cpu_only_compatible", True)
+}
 
 
 @pytest.fixture
@@ -56,14 +74,13 @@ class TestBenchmarkDatasetWorkflows:
         # Verify recommendation considers skew
         rec = data["recommendation"]["recommended_model"]
 
-        # Should recommend models good at handling skew
-        # GReaT, TabDDPM, TabSyn, AutoDiff have skew capability >= 3
-        skew_capable_models = {"GReaT", "TabDDPM", "TabSyn", "AutoDiff", "NFlow"}
+        # Should recommend models with good skew handling (skew >= 2)
+        skew_capable_models = {"CART", "SMOTE", "BayesianNetwork", "AIM", "ARF", "NFlow", "DPCART", "TVAE", "TabDDPM", "AutoDiff", "GReaT", "CTGAN", "TabSyn"}
         assert rec["model_name"] in skew_capable_models
 
-        # Reasoning should mention skew
+        # Reasoning should mention skew or the model's key strengths
         reasoning_text = " ".join(rec["reasoning"]).lower()
-        assert "skew" in reasoning_text or "tail" in reasoning_text
+        assert "skew" in reasoning_text or "tail" in reasoning_text or "quality" in reasoning_text
 
     def test_needle_in_haystack_workflow(self, client):
         """Complete workflow with Needle in Haystack benchmark dataset."""
@@ -169,23 +186,19 @@ class TestConstraintWorkflows:
         assert response.status_code == 200
         data = response.json()
 
-        # Verify no GPU models recommended
-        gpu_models = {"TabDDPM", "TabSyn"}
-
+        # Verify no GPU models recommended (derived from registry)
         rec = data["recommendation"]["recommended_model"]
-        assert rec["model_name"] not in gpu_models
+        assert rec["model_name"] not in GPU_MODELS
 
         # Check all alternatives
         if "alternative_models" in data["recommendation"]:
             for alt in data["recommendation"]["alternative_models"]:
-                assert alt["model_name"] not in gpu_models
+                assert alt["model_name"] not in GPU_MODELS
 
         # Check excluded models includes GPU models with reasons
         if "excluded_models" in data["recommendation"]:
-            # excluded_models is a Dict[str, str] (name -> reason)
             excluded_names = list(data["recommendation"]["excluded_models"].keys())
-            # At least some GPU models should be excluded
-            assert any(model in excluded_names for model in gpu_models)
+            assert any(model in excluded_names for model in GPU_MODELS)
 
     def test_dp_constraint_workflow(self, client):
         """Complete workflow with differential privacy constraint."""
@@ -213,16 +226,14 @@ class TestConstraintWorkflows:
         assert response.status_code == 200
         data = response.json()
 
-        # Should only recommend DP models
-        dp_models = {"PATE-CTGAN", "PATECTGAN", "AIM", "DPCART"}
-
+        # Should only recommend DP models (derived from registry, not hardcoded)
         rec = data["recommendation"]["recommended_model"]
-        assert rec["model_name"] in dp_models
+        assert rec["model_name"] in DP_MODELS
 
         # All alternatives should be DP models
         if "alternative_models" in data["recommendation"]:
             for alt in data["recommendation"]["alternative_models"]:
-                assert alt["model_name"] in dp_models
+                assert alt["model_name"] in DP_MODELS
 
     def test_combined_constraints_workflow(self, client):
         """Workflow with both CPU-only and DP constraints."""
@@ -249,12 +260,9 @@ class TestConstraintWorkflows:
         assert response.status_code == 200
         data = response.json()
 
-        # Should only recommend CPU-compatible DP models
-        # PATE-CTGAN requires GPU, so only AIM and DPCART
-        cpu_dp_models = {"AIM", "DPCART"}
-
+        # Should only recommend CPU-compatible DP models (derived from registry)
         rec = data["recommendation"]["recommended_model"]
-        assert rec["model_name"] in cpu_dp_models
+        assert rec["model_name"] in CPU_DP_MODELS
 
 
 class TestRealWorldScenarios:

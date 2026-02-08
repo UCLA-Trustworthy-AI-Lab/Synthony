@@ -13,12 +13,12 @@ services:
       - API_HOST=0.0.0.0
       - API_PORT=8000
       - API_WORKERS=1
-      - SYNTHONY_SYSTEM_PROMPT=/app/docs/SystemPrompt_v2.md
+      - SYNTHONY_SYSTEM_PROMPT=/app/config/SystemPrompt.md
       # LLM Configuration (optional)
       - VLLM_URL=${VLLM_URL:-}
       - VLLM_API_KEY=${VLLM_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
     volumes:
       # Development: mount source for hot-reload
       - ./src:/app/src:ro
@@ -52,7 +52,7 @@ services:
       - VLLM_URL=${VLLM_URL:-}
       - VLLM_API_KEY=${VLLM_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
     volumes:
       - ./src:/app/src:ro
       - ./docs:/app/docs:ro

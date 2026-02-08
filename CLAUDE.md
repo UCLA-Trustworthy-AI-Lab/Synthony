@@ -83,10 +83,13 @@ StochasticDataAnalyzer.analyze()         # src/synthony/core/analyzer.py
 DatasetProfile (Pydantic)                 # core/schemas.py
     ↓
 ModelRecommendationEngine.recommend()    # recommender/engine.py
-    ├── Apply hard filters (cpu_only, strict_dp)
-    ├── Rule-based scoring (from model_capabilities.json)
+    ├── Load config from registry (thresholds, priorities)
+    ├── Apply hard filters (cpu_only, strict_dp, exclude, row limits)
+    ├── Hard Problem detection (skew + cardinality + zipfian)
+    ├── Capability scoring + empirical quality bonus
+    ├── GPU/CPU-aware tie-breaking
     ├── [Optional] LLM scoring (with SystemPrompt)
-    └── Tie-breaking logic
+    └── [Optional] Focus/scale_factors for custom weighting
     ↓
 RecommendationResult
 ```
@@ -111,7 +114,7 @@ Defined in `src/synthony/utils/constants.py`:
 | Severe Skew | \|skewness\| > 2.0 | Breaks basic GANs/VAEs |
 | High Cardinality | unique > 500 | Mode collapse risk |
 | Zipfian Distribution | Top 20% > 80% | Requires specialized tokenization |
-| Small Data | rows < 500 | Overfitting risk → prefer ARF |
+| Small Data | rows < 1,000 | Overfitting risk → prefer ARF |
 | Large Data | rows > 50,000 | LLMs impractical due to latency |
 
 ### Model Registry
@@ -125,6 +128,14 @@ Defined in `src/synthony/utils/constants.py`:
 - **Statistical**: BayesianNetwork, NFlow, SMOTE, AIM
 - **Baseline**: Identity
 
+The registry also stores all engine configuration:
+- `metadata.dp_threshold` — DP filter threshold (default: 3)
+- `metadata.capability_thresholds` — 11 scoring thresholds
+- `metadata.hard_problem_confidence` — confidence scores for hard problem path
+- `metadata.score_decay` — match score decay curve (1.0/0.7/0.4/0.0)
+- `hard_problem_routing` — primary model, large data fallback, fallback priority
+- `tie_breaking_priority` — GPU/CPU/speed/small_data priority lists
+
 ## Environment Variables
 
 | Variable | Purpose |
@@ -137,8 +148,9 @@ Defined in `src/synthony/utils/constants.py`:
 
 - `src/synthony/core/schemas.py` - Pydantic models: `DatasetProfile`, `StressFactors`, `RecommendationResult`
 - `src/synthony/utils/constants.py` - `AnalyzerConfig` with all configurable thresholds
-- `docs/SystemPrompt_v4.0.md` - Knowledge base with model capability scores (used by LLM engine)
-- `docs/architecture_v3.md` - Complete system architecture rationale
+- `config/SystemPrompt.md` - LLM system prompt v5.0 (canonical, used by engine)
+- `docs/scoring_methodology.md` - Capability scoring formulas and engine pipeline
+- `docs/ISSUE_recommender_accuracy_v7.md` - Resolved accuracy issue report
 
 ## MCP Server Integration
 
@@ -174,6 +186,6 @@ print(f"High Cardinality: {profile.stress_factors.high_cardinality}")
 
 # Get recommendation
 engine = ModelRecommendationEngine()
-result = engine.recommend_rulebased(profile)
-print(f"Recommended: {result.primary_recommendation.model_name}")
+result = engine.recommend(profile, method="rule_based")
+print(f"Recommended: {result.recommended_model.model_name}")
 ```

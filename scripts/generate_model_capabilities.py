@@ -17,7 +17,8 @@ from datetime import datetime
 
 import numpy as np
 
-capabilities_version = "1.0"
+__curret__version__ = "7.0"
+__new_ver__ = '7.1'
 
 # Model metadata (static properties not derived from benchmarks)
 MODEL_METADATA = {
@@ -458,7 +459,7 @@ def generate_capabilities(benchmark_dir: Path, source_label: str = "spark") -> d
         models = data.get("models", {})
 
     # Calculate capabilities for each model
-    models = {}
+    #models = {}
 
     for model_name, benchmarks in model_benchmarks.items():
         if model_name not in MODEL_METADATA:
@@ -596,7 +597,7 @@ def generate_capabilities(benchmark_dir: Path, source_label: str = "spark") -> d
 
     return {
         "metadata": {
-            "version": "7.0.0",
+            "version": __new_ver__,
             "last_updated": datetime.now().strftime("%Y-%m-%d"),
             "source": f"{source_label} benchmarks (10 datasets, 14 models) + v6.0.0 metadata. Cardinality uses density-normalized formula.",
             "description": "Model capabilities derived from empirical benchmark results with row-count-normalized cardinality scoring.",

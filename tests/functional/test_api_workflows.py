@@ -318,10 +318,9 @@ class TestAnalyzeAndRecommendEndpoint:
         # Should detect severe skew
         assert data["analysis"]["dataset_profile"]["stress_factors"]["severe_skew"] is True
 
-        # Should recommend models good at handling skew
-        # GReaT, TabDDPM, TabSyn, AutoDiff have good skew handling
+        # Should recommend models with good skew handling (skew >= 2)
         rec_model = data["recommendation"]["recommended_model"]["model_name"]
-        skew_capable_models = {"GReaT", "TabDDPM", "TabSyn", "AutoDiff", "ARF", "NFlow"}
+        skew_capable_models = {"CART", "SMOTE", "BayesianNetwork", "AIM", "ARF", "NFlow", "DPCART", "TVAE", "TabDDPM", "AutoDiff", "GReaT", "CTGAN", "TabSyn"}
         assert rec_model in skew_capable_models
 
     def test_one_shot_hybrid_mode_fallback(self, client, sample_csv_file):

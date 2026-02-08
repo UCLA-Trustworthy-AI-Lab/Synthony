@@ -468,8 +468,9 @@ async def list_models(
         if cpu_only and not info.get("constraints", {}).get("cpu_only_compatible", False):
             continue
 
-        # DP filter
-        if requires_dp and info.get("capabilities", {}).get("privacy_dp", 0) < 3:
+        # DP filter (threshold from registry metadata.dp_threshold)
+        dp_threshold = recommender.model_capabilities.get("metadata", {}).get("dp_threshold", 3)
+        if requires_dp and info.get("capabilities", {}).get("privacy_dp", 0) < dp_threshold:
             continue
 
         filtered_models[name] = info

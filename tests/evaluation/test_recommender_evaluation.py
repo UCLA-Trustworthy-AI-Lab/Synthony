@@ -124,24 +124,31 @@ DATASET_GROUND_TRUTH = {
     },
 }
 
-# All 16 valid model names in the registry
-ALL_MODELS = {
-    "GReaT", "TabDDPM", "TabSyn", "AutoDiff", "CTGAN", "TVAE",
-    "GaussianCopula", "ARF", "PATE-CTGAN", "AIM", "DPCART",
-    "BayesianNetwork", "CART", "NFlow", "SMOTE", "Identity",
-}
+# Derive model sets dynamically from model_capabilities.json via engine
+from synthony.recommender.engine import ModelRecommendationEngine as _Engine
+_engine_ref = _Engine()
+_MODELS = _engine_ref.models
+_DP_THRESHOLD = _engine_ref.config.dp_min_score
+
+ALL_MODELS = set(_MODELS.keys())
 
 # GPU-only models (cpu_only_compatible=False)
-GPU_MODELS = {"GReaT", "TabDDPM", "TabSyn", "AutoDiff", "TVAE", "PATE-CTGAN"}
+GPU_MODELS = {
+    name for name, info in _MODELS.items()
+    if not info.get("constraints", {}).get("cpu_only_compatible", True)
+}
 
 # CPU-compatible models
 CPU_MODELS = ALL_MODELS - GPU_MODELS
 
-# DP-capable models (privacy_dp >= 3)
-DP_MODELS = {"PATE-CTGAN", "PATECTGAN", "AIM", "DPCART"}
+# DP-capable models (privacy_dp >= dp_threshold from registry)
+DP_MODELS = {
+    name for name, info in _MODELS.items()
+    if info.get("capabilities", {}).get("privacy_dp", 0) >= _DP_THRESHOLD
+}
 
 # CPU + DP intersection
-CPU_DP_MODELS = CPU_MODELS & DP_MODELS  # {"AIM", "DPCART"}
+CPU_DP_MODELS = CPU_MODELS & DP_MODELS
 
 # Datasets with trial4 synthetic data
 TRIAL4_DATASETS = ["abalone", "Bean", "faults", "IndianLiverPatient", "insurance", "Obesity", "Shoppers", "wilt"]
@@ -292,7 +299,6 @@ class TestHardProblemDetection:
 
     def test_hard_problem_routes_to_great_for_small_data(self, engine):
         """Hard problem routing should prefer GReaT when rows < max_recommended."""
-        # GReaT has max_recommended_rows=10000, so use a small hard dataset
         profile = DatasetProfile(
             row_count=5000,
             column_count=10,
@@ -302,9 +308,9 @@ class TestHardProblemDetection:
                 large_data=False, higher_order_correlation=False,
             ),
         )
-        eligible, _ = engine._apply_hard_filters({"dataset_rows": profile.row_count})
+        eligible, excluded = engine._apply_hard_filters({"dataset_rows": profile.row_count})
         assert "GReaT" in eligible, "GReaT should be eligible for 5000 rows"
-        result = engine._handle_hard_problem(profile, eligible, {})
+        result = engine._handle_hard_problem(profile, eligible, excluded)
         assert result == "GReaT", f"Expected GReaT for hard problem, got {result}"
 
     def test_hard_problem_htru2_excludes_great(self, engine, all_profiles):
@@ -692,11 +698,11 @@ class TestTieBreaking:
         assert result in {"TVAE", "CTGAN", "ARF", "GaussianCopula"}
 
     def test_quality_default_tiebreak(self, engine):
-        """Default tie-breaking should prefer quality models."""
+        """Default tie-breaking should prefer GPU models when cpu_only=false."""
         sorted_models = self._make_sorted_models([
             ("ARF", 10.0),
             ("TabDDPM", 9.8),
-            ("CTGAN", 9.5),
+            ("CART", 9.5),
         ])
         profile = DatasetProfile(
             row_count=5000, column_count=10,
@@ -706,8 +712,13 @@ class TestTieBreaking:
                 large_data=False, higher_order_correlation=False,
             ),
         )
+        # Default (cpu_only not set) → GPU quality priority
         result = engine._apply_tie_breaking(sorted_models, profile, {})
-        assert result in {"TabDDPM", "TabSyn", "AutoDiff"}
+        assert result in {"GReaT", "TabDDPM", "TabSyn", "AutoDiff", "TVAE", "PATECTGAN"}
+
+        # cpu_only=True → CPU quality priority
+        result_cpu = engine._apply_tie_breaking(sorted_models, profile, {"cpu_only": True})
+        assert result_cpu in {"CART", "SMOTE", "BayesianNetwork", "ARF", "NFlow"}
 
     def test_deterministic_tiebreak(self, engine, all_profiles):
         """Tie-breaking should be deterministic across runs."""

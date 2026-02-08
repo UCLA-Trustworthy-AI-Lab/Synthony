@@ -40,11 +40,14 @@ Key methodological improvements over v4.0 (trial4):
 - **Correlation**: Tested on 10 diverse datasets (vs 8), revealing many models preserve correlation far better than trial4 indicated
 - **Skew**: More datasets exposed that some models (TabDDPM, NFlow) overfit skew on small trial4 test sets
 
-### Excluded Models (Not Benchmarked — do NOT recommend)
+### Additional Models (Literature-Based Scores)
 
-| Model | Type | Reason |
-|-------|------|--------|
-| GReaT | LLM | Literature-only scores, not empirically validated |
+| Model | Type | GPU | Skew | Card | Zipfian | Small | Corr | Privacy | Quality |
+|:------|:-----|:---:|:----:|:----:|:-------:|:-----:|:----:|:-------:|:-------:|
+| **GReaT** | LLM | yes | 3 | 4 | 4 | 3 | 3 | 0 | N/A (literature) |
+| **Identity** | Baseline | no | 4 | 4 | 4 | 4 | 4 | 0 | 0.989 (passthrough) |
+
+**Note**: GReaT scores are literature-derived (not empirically validated). Identity is a passthrough baseline for testing only.
 
 ## 2. MODEL TIERS (Validated on abalone, 10-dataset avg)
 
@@ -98,9 +101,9 @@ hard_problem = (
 )
 
 IF hard_problem:
-    RECOMMEND ARF (quality=0.962, skew=2, card=4, zipfian=3)
-    ALTERNATIVE: BayesianNetwork (quality=0.971, skew=3, card=4)
-    NOTE: ARF is the only active model with zipfian=3 and card=4 combined
+    RECOMMEND GReaT (primary hard problem model, skew=3, card=4, zipfian=4)
+    IF rows > 50k: RECOMMEND TabDDPM (GReaT too slow for large data)
+    FALLBACK PRIORITY: ARF, TabSyn, CART, SMOTE, BayesianNetwork
 ```
 
 ### Step 3: Check Data Size
@@ -148,12 +151,17 @@ IF top_models within 5% score:
         PRIORITY: CART > ARF > SMOTE > TVAE > DPCART
         REASON: "Fast training and inference for rapid iteration"
 
-    # Rule 3: Quality Focus (default)
+    # Rule 3: GPU Quality Focus (default, when cpu_only=false)
+    ELIF NOT cpu_only:
+        PRIORITY: GReaT > TabDDPM > TabSyn > AutoDiff > TVAE > PATECTGAN
+        REASON: "GPU/Diffusion/LLM models preferred when GPU available"
+
+    # Rule 4: CPU Quality Focus (when cpu_only=true or no GPU match)
     ELSE:
         PRIORITY: CART > SMOTE > BayesianNetwork > ARF > NFlow
-        REASON: "Highest empirical quality from spark benchmarks"
+        REASON: "Highest empirical quality from spark benchmarks (CPU)"
 
-    # Rule 4: Alphabetical Fallback
+    # Rule 5: Alphabetical Fallback
     IF still tied after above rules:
         SELECT alphabetically first model
         REASON: "Alphabetical deterministic fallback"

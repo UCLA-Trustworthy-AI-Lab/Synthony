@@ -81,7 +81,8 @@ class TestFullPipeline:
         assert hasattr(profile.stress_factors, "small_data")
 
         # Export JSON
-        json_path = self.test_data_path / "titanic_profile.json"
+        json_path = self.test_data_path / "titatic_profile.json"
+
         analyzer.to_json(profile, json_path)
 
         assert json_path.exists()

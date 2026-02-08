@@ -30,7 +30,7 @@ Synthony solves this by:
 - **Severe Skewness Detection** — Fisher-Pearson coefficient > 2.0 breaks basic GANs/VAEs
 - **High Cardinality Analysis** — >500 unique values risk mode collapse
 - **Zipfian Distribution Detection** — Power-law concentration (top 20% > 80% of data)
-- **Data Size Classification** — Small (<500 rows) vs Large (>50k rows) constraints
+- **Data Size Classification** — Small (<1000 rows) vs Large (>50k rows) constraints
 - **Higher-Order Correlation Detection** — Dense but non-linear relationships
 
 ### Model Recommendation
@@ -121,13 +121,16 @@ curl -X POST "http://localhost:8000/analyze-and-recommend" \
 
 ```bash
 # Profile a dataset
-synthony-profile data.csv
+synthony-profile data.csv --verbose
+synthony-profile data.csv -o profile.json
 
-# Save profile to JSON
-synthony-profile data.csv --output profile.json
+# Get model recommendation
+synthony-recommender -i data.csv --method rulebased
+synthony-recommender -i data.csv --cpu-only --strict-dp
+synthony-recommender -i data.csv --method hybrid --skew-sf 2.0
 
-# Generate benchmark datasets
-synthony-benchmark --output-dir ./benchmarks
+# Compare original vs synthetic data quality
+synthony-benchmark -r original.csv -s synthetic.csv --verbose
 ```
 
 ### MCP Server for AI Agents
@@ -187,40 +190,50 @@ Synthony identifies data characteristics that break traditional models:
 | Severe Skew | \|skewness\| > 2.0 | Breaks basic GANs/VAEs |
 | High Cardinality | unique > 500 | Mode collapse risk |
 | Zipfian Distribution | Top 20% > 80% | Requires specialized tokenization |
-| Small Data | rows < 500 | Overfitting risk |
+| Small Data | rows < 1,000 | Overfitting risk |
 | Large Data | rows > 50,000 | LLMs impractical |
 
 ### 2. Model Scoring
 
 Each model is scored 0-4 on capability dimensions (calibrated from spark benchmarks v7.0.0):
 
-| Model | Type | Skew | Cardinality | Zipfian | Small Data | Correlation | Privacy | Quality |
-|-------|------|------|-------------|---------|------------|-------------|---------|---------|
-| CART | Tree | 3 | 4 | 2 | 4 | 4 | 0 | 0.981 |
-| SMOTE | Statistical | 3 | 4 | 2 | 4 | 4 | 0 | 0.979 |
-| BayesianNetwork | Statistical | 3 | 4 | 2 | 4 | 3 | 0 | 0.971 |
-| ARF | Tree | 2 | 4 | 3 | 4 | 4 | 0 | 0.962 |
-| NFlow | Flow | 2 | 4 | 2 | 4 | 1 | 0 | 0.915 |
-| TVAE | VAE | 2 | 4 | 1 | 3 | 4 | 0 | 0.865 |
-| DPCART | Tree+DP | 2 | 0 | 2 | 2 | 3 | 3 | 0.759 |
-| TabDDPM | Diffusion | 1 | 2 | 2 | 2 | 3 | 0 | 0.697 |
-| AIM | Stat+DP | 3 | 0 | 1 | 2 | 3 | 4 | 0.540 |
-| PATECTGAN | GAN+DP | 0 | 4 | 2 | 1 | 0 | 4 | 0.455 |
+| Model | Type | GPU | Skew | Card | Zipfian | Small | Corr | DP | Quality |
+|-------|------|-----|------|------|---------|-------|------|----|---------|
+| CART | Tree | no | 3 | 4 | 2 | 4 | 4 | 0 | 0.981 |
+| SMOTE | Statistical | no | 3 | 4 | 2 | 4 | 4 | 0 | 0.979 |
+| BayesianNetwork | Statistical | no | 3 | 4 | 2 | 4 | 3 | 0 | 0.971 |
+| ARF | Tree | no | 2 | 4 | 3 | 4 | 4 | 0 | 0.962 |
+| NFlow | Flow | no | 2 | 4 | 2 | 4 | 1 | 0 | 0.915 |
+| TVAE | VAE | yes | 2 | 4 | 1 | 3 | 4 | 0 | 0.865 |
+| TabSyn | Diffusion | yes | 2 | 4 | 3 | 3 | 2 | 0 | 0.848 |
+| CTGAN | GAN | no | 1 | 4 | 2 | 2 | 3 | 0 | 0.809 |
+| DPCART | Tree+DP | no | 2 | 0 | 2 | 2 | 3 | 3 | 0.759 |
+| TabDDPM | Diffusion | yes | 1 | 2 | 2 | 2 | 3 | 0 | 0.697 |
+| AutoDiff | Diffusion | yes | 1 | 3 | 2 | 2 | 1 | 0 | 0.634 |
+| AIM | Stat+DP | no | 3 | 0 | 1 | 2 | 3 | 4 | 0.540 |
+| PATECTGAN | GAN+DP | yes | 0 | 4 | 2 | 1 | 0 | 4 | 0.455 |
+| GReaT | LLM | yes | 3 | 4 | 4 | 3 | 3 | 0 | N/A |
+| Identity | Baseline | no | 4 | 4 | 4 | 4 | 4 | 0 | 0.989* |
+
+*Identity is a passthrough baseline for testing. GReaT scores are literature-derived.
 
 ### 3. Constraint Filtering
 
 Hard constraints eliminate impossible options:
 
-- **`cpu_only`** — Removes GPU-dependent models (TabDDPM, TabSyn, GReaT)
-- **`strict_dp`** — Keeps only differential privacy models (PATE-CTGAN, DPCART, AIM)
+- **`cpu_only`** — Removes GPU-dependent models (TabDDPM, TabSyn, AutoDiff, TVAE, PATECTGAN, GReaT)
+- **`strict_dp`** — Keeps only models with DP score >= threshold (AIM, PATECTGAN, DPCART)
 
-### 4. Tie-Breaking
+### 4. Quality Bonus & Tie-Breaking
 
-When top models score within 5%:
+An empirical quality bonus from spark benchmarks is added to capability scores. When top models score within 5%, deterministic tie-breaking applies:
 
-- **Small data (<500 rows)** → Prefer ARF
-- **Large data with hard problems** → Prefer TabDDPM (GReaT too slow)
-- **Otherwise** → Prefer faster models (TVAE, ARF)
+- **Small data** (<1000 rows) → ARF > CART > BayesianNetwork > SMOTE
+- **GPU available** (cpu_only=false) → GReaT > TabDDPM > TabSyn > AutoDiff > TVAE
+- **CPU only** → CART > SMOTE > BayesianNetwork > ARF > NFlow
+- **Speed preference** → CART > ARF > SMOTE > TVAE > DPCART
+
+All thresholds and priority lists are configurable via `config/model_capabilities.json`.
 
 ## Output Schema
 
