@@ -53,18 +53,6 @@ def test_list_models():
     print(f"✓ Total models: {models['total_models']}")
     print(f"✓ Model names: {list(models['models'].keys())}")
 
-    # Test CPU-only filter
-    response = requests.get(f"{BASE_URL}/models?cpu_only=true")
-    assert response.status_code == 200
-    cpu_models = response.json()
-    print(f"✓ CPU-only models: {cpu_models['filtered_models']}")
-
-    # Test DP filter
-    response = requests.get(f"{BASE_URL}/models?requires_dp=true")
-    assert response.status_code == 200
-    dp_models = response.json()
-    print(f"✓ Differential privacy models: {dp_models['filtered_models']}")
-
     return models
 
 
@@ -170,7 +158,6 @@ def test_recommend(analysis_result: dict, method: str = "rule_based"):
         "dataset_id": analysis_result["dataset_id"],
         "dataset_profile": analysis_result["dataset_profile"],
         "column_analysis": analysis_result["column_analysis"],
-        "constraints": {"cpu_only": True, "strict_dp": False},
         "method": method,
         "top_n": 3,
     }
@@ -211,7 +198,6 @@ def test_analyze_and_recommend(test_file: Path):
             params={
                 "dataset_id": "test_dataset_oneshot",
                 "method": "hybrid",
-                "cpu_only": True,
                 "top_n": 3,
             },
             files={"file": f},

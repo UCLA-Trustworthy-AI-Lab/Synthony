@@ -5,11 +5,10 @@ Tests complete workflows from file upload through analysis to final recommendati
 """
 
 import io
-import json
-import pytest
-from pathlib import Path
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
 from synthony.api.server import app
@@ -41,7 +40,6 @@ class TestBenchmarkDatasetWorkflows:
             params={
                 "dataset_id": "benchmark_long_tail",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("long_tail.csv", csv_buffer, "text/csv")},
@@ -79,7 +77,6 @@ class TestBenchmarkDatasetWorkflows:
             params={
                 "dataset_id": "benchmark_needle",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("needle.csv", csv_buffer, "text/csv")},
@@ -112,7 +109,6 @@ class TestBenchmarkDatasetWorkflows:
             params={
                 "dataset_id": "benchmark_small",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("small.csv", csv_buffer, "text/csv")},
@@ -135,127 +131,6 @@ class TestBenchmarkDatasetWorkflows:
             ])
 
         assert "ARF" in all_models or "GaussianCopula" in all_models
-
-
-class TestConstraintWorkflows:
-    """Test workflows with different constraint combinations."""
-
-    def test_cpu_only_constraint_workflow(self, client):
-        """Complete workflow with CPU-only constraint."""
-        # Create test dataset
-        np.random.seed(42)
-        from scipy.stats import lognorm
-
-        df = pd.DataFrame({
-            "col1": lognorm.rvs(s=0.95, scale=np.exp(5), size=1000, random_state=42),
-            "col2": np.random.randn(1000),
-            "col3": np.random.choice(["A", "B", "C"], 1000),
-        })
-
-        csv_buffer = io.BytesIO()
-        df.to_csv(csv_buffer, index=False)
-        csv_buffer.seek(0)
-
-        # Request with CPU-only constraint
-        response = client.post(
-            "/analyze-and-recommend",
-            params={
-                "method": "rule_based",
-                "cpu_only": True,
-                "strict_dp": False,
-                "top_n": 5,
-            },
-            files={"file": ("test.csv", csv_buffer, "text/csv")},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-
-        # Verify no GPU models recommended
-        gpu_models = {"TabDDPM", "TabSyn", "GReaT"}
-
-        rec = data["recommendation"]["recommended_model"]
-        assert rec["model_name"] not in gpu_models
-
-        # Check all alternatives
-        if "alternative_models" in data["recommendation"]:
-            for alt in data["recommendation"]["alternative_models"]:
-                assert alt["model_name"] not in gpu_models
-
-        # Check excluded models includes GPU models with reasons
-        if "excluded_models" in data["recommendation"]:
-            excluded_names = [ex["model_name"] for ex in data["recommendation"]["excluded_models"]]
-            # At least some GPU models should be excluded
-            assert any(model in excluded_names for model in gpu_models)
-
-    def test_dp_constraint_workflow(self, client):
-        """Complete workflow with differential privacy constraint."""
-        np.random.seed(42)
-        df = pd.DataFrame({
-            "sensitive_data": np.random.randn(1000),
-            "category": np.random.choice(["A", "B", "C"], 1000),
-        })
-
-        csv_buffer = io.BytesIO()
-        df.to_csv(csv_buffer, index=False)
-        csv_buffer.seek(0)
-
-        response = client.post(
-            "/analyze-and-recommend",
-            params={
-                "method": "rule_based",
-                "cpu_only": False,
-                "strict_dp": True,
-                "top_n": 3,
-            },
-            files={"file": ("sensitive.csv", csv_buffer, "text/csv")},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-
-        # Should only recommend DP models
-        dp_models = {"PATE-CTGAN", "AIM", "DPCART"}
-
-        rec = data["recommendation"]["recommended_model"]
-        assert rec["model_name"] in dp_models
-
-        # All alternatives should be DP models
-        if "alternative_models" in data["recommendation"]:
-            for alt in data["recommendation"]["alternative_models"]:
-                assert alt["model_name"] in dp_models
-
-    def test_combined_constraints_workflow(self, client):
-        """Workflow with both CPU-only and DP constraints."""
-        np.random.seed(42)
-        df = pd.DataFrame({
-            "data": np.random.randn(500),
-        })
-
-        csv_buffer = io.BytesIO()
-        df.to_csv(csv_buffer, index=False)
-        csv_buffer.seek(0)
-
-        response = client.post(
-            "/analyze-and-recommend",
-            params={
-                "method": "rule_based",
-                "cpu_only": True,
-                "strict_dp": True,
-                "top_n": 3,
-            },
-            files={"file": ("constrained.csv", csv_buffer, "text/csv")},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-
-        # Should only recommend CPU-compatible DP models
-        # PATE-CTGAN requires GPU, so only AIM and DPCART
-        cpu_dp_models = {"AIM", "DPCART"}
-
-        rec = data["recommendation"]["recommended_model"]
-        assert rec["model_name"] in cpu_dp_models
 
 
 class TestRealWorldScenarios:
@@ -292,12 +167,11 @@ class TestRealWorldScenarios:
         assert profile["row_count"] == 5000
         assert profile["column_count"] == 6
 
-        # Step 2: Get model recommendations (try without constraints)
+        # Step 2: Get model recommendations
         recommend_response = client.post(
             "/recommend",
             json={
                 "dataset_profile": profile,
-                "constraints": {"cpu_only": False, "strict_dp": False},
                 "method": "rule_based",
                 "top_n": 5,
             },
@@ -310,33 +184,9 @@ class TestRealWorldScenarios:
         assert "alternative_models" in recommendation
         assert len(recommendation["alternative_models"]) > 0
 
-        # Step 3: Try with CPU constraint
-        csv_buffer2 = io.BytesIO()
-        df.to_csv(csv_buffer2, index=False)
-        csv_buffer2.seek(0)
-
-        cpu_response = client.post(
-            "/analyze-and-recommend",
-            params={
-                "dataset_id": "customer_data_cpu",
-                "method": "rule_based",
-                "cpu_only": True,
-                "top_n": 3,
-            },
-            files={"file": ("customers.csv", csv_buffer2, "text/csv")},
-        )
-
-        assert cpu_response.status_code == 200
-        cpu_data = cpu_response.json()
-
-        # Should get different (CPU-only) recommendations
-        cpu_rec = cpu_data["recommendation"]["recommended_model"]["model_name"]
-        gpu_models = {"TabDDPM", "TabSyn", "GReaT"}
-        assert cpu_rec not in gpu_models
-
     def test_production_deployment_workflow(self, client):
-        """Simulate production deployment workflow with constraints."""
-        # Production dataset (larger, needs CPU-only)
+        """Simulate production deployment workflow."""
+        # Production dataset (larger)
         np.random.seed(42)
         df = pd.DataFrame({
             "transaction_id": range(10000),
@@ -350,14 +200,11 @@ class TestRealWorldScenarios:
         df.to_csv(csv_buffer, index=False)
         csv_buffer.seek(0)
 
-        # Production requirements: CPU-only, fast inference
         response = client.post(
             "/analyze-and-recommend",
             params={
                 "dataset_id": "prod_transactions",
                 "method": "rule_based",
-                "cpu_only": True,
-                "strict_dp": False,
                 "top_n": 3,
             },
             files={"file": ("transactions.csv", csv_buffer, "text/csv")},
@@ -368,10 +215,6 @@ class TestRealWorldScenarios:
 
         # Verify production-ready recommendations
         rec = data["recommendation"]["recommended_model"]
-
-        # Should not recommend slow models for production
-        # GPU models are excluded by constraint
-        assert rec["model_name"] not in {"TabDDPM", "TabSyn", "GReaT"}
 
         # Should have high confidence
         assert rec["confidence_score"] >= 0.5
@@ -394,7 +237,6 @@ class TestEdgeCases:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("tiny.csv", csv_buffer, "text/csv")},
@@ -429,7 +271,6 @@ class TestEdgeCases:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("single_col.csv", csv_buffer, "text/csv")},
@@ -458,7 +299,6 @@ class TestEdgeCases:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("all_cat.csv", csv_buffer, "text/csv")},

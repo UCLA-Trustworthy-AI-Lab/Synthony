@@ -5,13 +5,12 @@ Identifies columns with severe tail distributions that challenge
 basic generative models like GANs and VAEs.
 """
 
-from typing import Dict, List
 
 import numpy as np
 import pandas as pd
 from scipy.stats import skew
 
-from synthony.core.schemas import SkewnessMetrics, DatasetProfile
+from synthony.core.schemas import SkewnessMetrics
 
 
 class SkewnessDetector:
@@ -67,8 +66,8 @@ class SkewnessDetector:
                 column_scores={}, max_skewness=0.0, severe_columns=[]
             )
 
-        results: Dict[str, float] = {}
-        severe_columns: List[str] = []
+        results: dict[str, float] = {}
+        severe_columns: list[str] = []
 
         for col in numeric_cols:
             # Remove NaN values

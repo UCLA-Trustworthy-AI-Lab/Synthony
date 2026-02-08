@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Advanced API testing scenarios."""
 
+
 import requests
-import json
 
 BASE_URL = "http://localhost:8000"
 
@@ -11,7 +11,7 @@ print("Advanced API Testing Scenarios")
 print("=" * 80)
 
 # Scenario 1: Two-step workflow (analyze, then recommend)
-print("\n📋 Scenario 1: Two-step workflow")
+print("\nScenario 1: Two-step workflow")
 print("-" * 80)
 print("Step 1: Analyze dataset...")
 
@@ -23,7 +23,7 @@ with open("/Users/hochan.son/Project/Synthony/dataset/input_data/abalone.csv", "
     )
 
 analysis = response.json()
-print(f"✓ Analyzed: {analysis['dataset_id']}")
+print(f"Analyzed: {analysis['dataset_id']}")
 print(f"  Rows: {analysis['dataset_profile']['row_count']}")
 print(f"  Max difficulty: {analysis['column_analysis']['max_column_difficulty']}/4")
 
@@ -37,15 +37,14 @@ rec_response = requests.post(
         "dataset_id": "abalone",
         "dataset_profile": analysis["dataset_profile"],
         "column_analysis": analysis["column_analysis"],
-        "constraints": {"cpu_only": True},
         "method": "rule_based",
         "top_n": 2
     }
 )
 rec_result = rec_response.json()
-print(f"     ✓ Recommended: {rec_result['recommended_model']['model_name']}")
-print(f"     ✓ Confidence: {rec_result['recommended_model']['confidence_score']:.0%}")
-print(f"     ✓ Alternatives: {[m['model_name'] for m in rec_result['alternative_models']]}")
+print(f"     Recommended: {rec_result['recommended_model']['model_name']}")
+print(f"     Confidence: {rec_result['recommended_model']['confidence_score']:.0%}")
+print(f"     Alternatives: {[m['model_name'] for m in rec_result['alternative_models']]}")
 
 # Try hybrid (will fallback to rule-based if LLM fails)
 print("\n  b) Hybrid recommendation:")
@@ -55,84 +54,28 @@ rec_response = requests.post(
         "dataset_id": "abalone",
         "dataset_profile": analysis["dataset_profile"],
         "column_analysis": analysis["column_analysis"],
-        "constraints": {"cpu_only": False},  # Allow GPU models
         "method": "hybrid",
         "top_n": 3
     }
 )
 rec_result = rec_response.json()
-print(f"     ✓ Recommended: {rec_result['recommended_model']['model_name']}")
-print(f"     ✓ Method used: {rec_result['method']}")
-print(f"     ✓ Confidence: {rec_result['recommended_model']['confidence_score']:.0%}")
+print(f"     Recommended: {rec_result['recommended_model']['model_name']}")
+print(f"     Method used: {rec_result['method']}")
+print(f"     Confidence: {rec_result['recommended_model']['confidence_score']:.0%}")
 
-# Scenario 2: Compare different constraints
-print("\n📋 Scenario 2: Comparing constraints (Bean dataset)")
-print("-" * 80)
-
-with open("/Users/hochan.son/Project/Synthony/dataset/input_data/Bean.csv", "rb") as f:
-    file_content = f.read()
-
-# Test with CPU-only constraint
-print("  a) With CPU-only constraint:")
-response1 = requests.post(
-    f"{BASE_URL}/analyze-and-recommend",
-    params={"dataset_id": "bean_cpu", "cpu_only": True, "top_n": 2},
-    files={"file": ("Bean.csv", file_content)}
-)
-result1 = response1.json()
-rec1 = result1["recommendation"]["recommended_model"]
-print(f"     ✓ Recommended: {rec1['model_name']}")
-print(f"     ✓ Excluded: {len(result1['recommendation']['excluded_models'])} GPU models")
-
-# Test without CPU constraint
-print("\n  b) Without CPU constraint (GPU allowed):")
-response2 = requests.post(
-    f"{BASE_URL}/analyze-and-recommend",
-    params={"dataset_id": "bean_gpu", "cpu_only": False, "top_n": 2},
-    files={"file": ("Bean.csv", file_content)}
-)
-result2 = response2.json()
-rec2 = result2["recommendation"]["recommended_model"]
-print(f"     ✓ Recommended: {rec2['model_name']}")
-print(f"     ✓ Type: {rec2['model_info']['type']}")
-print(f"     ✓ GPU required: {rec2['model_info']['constraints']['requires_gpu']}")
-
-# Scenario 3: Filtering models by type
-print("\n📋 Scenario 3: Filtering models by type")
+# Scenario 2: Filtering models by type
+print("\nScenario 2: Filtering models by type")
 print("-" * 80)
 
 types_to_test = ["GAN", "Diffusion", "Tree-based"]
 for model_type in types_to_test:
     response = requests.get(f"{BASE_URL}/models", params={"model_type": model_type})
     models = response.json()
-    model_names = list(models['models'].keys())
+    model_names = [m['name'] for m in models['models']]
     print(f"  {model_type}: {', '.join(model_names)}")
 
-# Scenario 4: Test with differential privacy constraint
-print("\n📋 Scenario 4: Differential Privacy models")
-print("-" * 80)
-
-response = requests.get(f"{BASE_URL}/models", params={"requires_dp": True})
-dp_models = response.json()
-print(f"  DP-enabled models: {list(dp_models['models'].keys())}")
-
-with open("/Users/hochan.son/Project/Synthony/dataset/input_data/insurance.csv", "rb") as f:
-    response = requests.post(
-        f"{BASE_URL}/analyze-and-recommend",
-        params={"dataset_id": "insurance_dp", "strict_dp": True, "top_n": 2},
-        files={"file": f}
-    )
-
-if response.status_code == 200:
-    result = response.json()
-    rec = result["recommendation"]["recommended_model"]
-    print(f"\n  With strict_dp=True:")
-    print(f"    ✓ Recommended: {rec['model_name']}")
-    print(f"    ✓ DP capability: {rec['capability_match']['privacy_dp']}/4")
-    print(f"    ✓ Excluded non-DP models: {len(result['recommendation']['excluded_models'])}")
-
-# Scenario 5: Performance comparison
-print("\n📋 Scenario 5: Model performance characteristics")
+# Scenario 3: Performance comparison
+print("\nScenario 3: Model performance characteristics")
 print("-" * 80)
 
 performance_models = ["GReaT", "TabDDPM", "TabTree", "GaussianCopula"]
@@ -147,10 +90,8 @@ for model_name in performance_models:
         print(f"{model_name:<20} {perf['training_speed']:<15} {perf['inference_speed']:<15} {perf['memory_usage']:<15}")
 
 print("\n" + "=" * 80)
-print("✅ All advanced scenarios tested successfully!")
+print("All advanced scenarios tested successfully!")
 print("=" * 80)
 print("\nKey Takeaways:")
-print("  • Two-step workflow allows reusing analysis for different constraints")
-print("  • CPU-only constraint significantly affects recommendations")
-print("  • Differential privacy models available for sensitive data")
-print("  • Performance characteristics help choose based on resources")
+print("  - Two-step workflow allows reusing analysis for different methods")
+print("  - Performance characteristics help choose based on resources")

@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 # Setup error logging
 error_log_path = Path("./logs/error.log")
@@ -27,10 +27,10 @@ error_logger.addHandler(error_handler)
 
 
 def log_error(
-    session_id: Optional[str],
+    session_id: str | None,
     action: str,
     error: Exception,
-    context: Optional[Dict[str, Any]] = None,
+    context: dict[str, Any] | None = None,
 ) -> str:
     """Log error to error.log file.
 

@@ -5,37 +5,43 @@ Separated from server.py for better organization and maintainability.
 """
 
 import json
-import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any
 
 import pandas as pd
-from fastapi import File, HTTPException, UploadFile, Query, Body, Request, APIRouter
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
 
+from synthony.api.database import (
+    create_analysis,
+    create_dataset,
+    create_session,
+    create_system_prompt,
+    get_active_prompt,
+    get_analysis,
+    get_analysis_by_dataset,
+    get_dataset,
+    get_dataset_profile,
+    list_system_prompts,
+    log_audit,
+    set_active_prompt,
+    set_active_prompt_by_version,
+)
+from synthony.api.security import get_client_info, log_error
+from synthony.api.server import (
+    AnalysisResponse,
+    HealthResponse,
+    ModelInfoResponse,
+    RecommendationMethod,
+    RecommendationRequest,
+)
+from synthony.api.storage import get_storage_manager
 from synthony.core.analyzer import StochasticDataAnalyzer
 from synthony.core.column_analyzer import ColumnAnalyzer
-from synthony.core.schemas import DatasetProfile, ColumnAnalysisResult
+from synthony.core.schemas import ColumnAnalysisResult, DatasetProfile
 from synthony.recommender.engine import (
     ModelRecommendationEngine,
     RecommendationResult,
 )
-from synthony.api.database import (
-    create_session,
-    create_dataset,
-    create_analysis,
-    log_audit,
-    create_system_prompt,
-    get_active_prompt,
-    list_system_prompts,
-    set_active_prompt,
-    set_active_prompt_by_version,
-    get_dataset,
-    get_analysis_by_dataset,
-    get_analysis,
-)
-from synthony.api.storage import get_storage_manager
-from synthony.api.security import get_client_info, log_error
 
 # ============================================================================
 # Create Router
@@ -44,9 +50,9 @@ from synthony.api.security import get_client_info, log_error
 router = APIRouter()
 
 # These will be injected by server.py
-analyzer: Optional[StochasticDataAnalyzer] = None
-column_analyzer: Optional[ColumnAnalyzer] = None
-recommender: Optional[ModelRecommendationEngine] = None
+analyzer: StochasticDataAnalyzer | None = None
+column_analyzer: ColumnAnalyzer | None = None
+recommender: ModelRecommendationEngine | None = None
 
 
 def set_services(
@@ -61,22 +67,12 @@ def set_services(
     recommender = recommender_inst
 
 
-# Import request/response models from server
-from synthony.api.server import (
-    AnalysisResponse,
-    RecommendationRequest,
-    RecommendationMethod,
-    ModelInfoResponse,
-    HealthResponse,
-)
-
-
 # ============================================================================
 # Endpoints
 # ============================================================================
 
 
-@router.get("/", response_model=Dict[str, str])
+@router.get("/", response_model=dict[str, str])
 async def root():
     """Root endpoint with API information."""
     return {
@@ -110,7 +106,7 @@ async def health_check():
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_dataset(
     file: UploadFile = File(..., description="CSV or Parquet file to analyze"),
-    dataset_id: Optional[str] = Query(None, description="Optional dataset identifier"),
+    dataset_id: str | None = Query(None, description="Optional dataset identifier"),
     request: Request = None,
 ):
     """
@@ -244,9 +240,8 @@ async def recommend_model(request: RecommendationRequest = Body(...)):
     **Process**:
     1. If analysis_id provided: Retrieve from database
     2. Otherwise: Use provided dataset_profile + column_analysis
-    3. Apply user constraints (cpu_only, strict_dp, etc.)
-    4. Run recommendation engine (rule_based / llm / hybrid)
-    5. Return ranked models with reasoning
+    3. Run recommendation engine (rule_based / llm / hybrid)
+    4. Return ranked models with reasoning
 
     **Recommendation Methods**:
     - `rule_based`: Fast scoring based on capability matrix (no API key needed)
@@ -279,7 +274,13 @@ async def recommend_model(request: RecommendationRequest = Body(...)):
             if isinstance(request.dataset_profile, dict):
                 dataset_profile = DatasetProfile(**request.dataset_profile)
             elif isinstance(request.dataset_profile_id, str):
-                dataset_profile = get_dataset_profile(request.dataset_profile_id)
+                profile_dict = get_dataset_profile(request.dataset_profile_id)
+                if not profile_dict:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"No dataset profile found for ID '{request.dataset_profile_id}'"
+                    )
+                dataset_profile = DatasetProfile(**profile_dict)
             else:
                 dataset_profile = request.dataset_profile
 
@@ -299,7 +300,6 @@ async def recommend_model(request: RecommendationRequest = Body(...)):
         result = recommender.recommend(
             dataset_profile=dataset_profile,
             column_analysis=column_analysis,
-            constraints=request.constraints,
             method=request.method.value,
             top_n=request.top_n,
         )
@@ -311,17 +311,15 @@ async def recommend_model(request: RecommendationRequest = Body(...)):
         raise HTTPException(status_code=500, detail=f"Recommendation failed: {str(e)}")
 
 
-@router.post("/analyze-and-recommend", response_model=Dict[str, Any])
+@router.post("/analyze-and-recommend", response_model=dict[str, Any])
 async def analyze_and_recommend(
     request: Request = None,
     file: UploadFile = File(default=None),
-    dataset_id: Optional[str] = Query(None, description="Dataset identifier (for naming a new upload)"),
-    dataset_profile_id: Optional[str] = Query(None, description="Existing dataset profile ID to use (previously analyzed)"),
+    dataset_id: str | None = Query(None, description="Dataset identifier (for naming a new upload)"),
+    dataset_profile_id: str | None = Query(None, description="Existing dataset profile ID to use (previously analyzed)"),
     method: RecommendationMethod = Query(
         RecommendationMethod.hybrid, description="Recommendation method"
     ),
-    cpu_only: bool = Query(False, description="CPU-only constraint (exclude GPU models)"),
-    strict_dp: bool = Query(False, description="Strict DP requirement"),
     top_n: int = Query(3, ge=1, le=10, description="Top N alternatives"),
 ):
     """
@@ -334,9 +332,8 @@ async def analyze_and_recommend(
     **Process**:
     1. If file provided: Upload and analyze
     2. If dataset_profile_id provided: Retrieve from database
-    3. Apply constraints
-    4. Generate recommendations
-    5. Return combined result
+    3. Generate recommendations
+    4. Return combined result
 
     **Returns**: Combined response with analysis + recommendation
     """
@@ -364,7 +361,7 @@ async def analyze_and_recommend(
         # Mode 2: Use existing dataset
         elif dataset_profile_id:
             # Retrieve existing analysis from database
-            # Note: In current schema, dataset_id is often used as the key. 
+            # Note: In current schema, dataset_id is often used as the key.
             # We map dataset_profile_id to the lookups expected by get_analysis_by_dataset
             analysis = get_analysis_by_dataset(dataset_profile_id)
 
@@ -395,18 +392,11 @@ async def analyze_and_recommend(
                 message=f"Using cached analysis from {analysis.created_at.isoformat()}"
             )
 
-        # Step 2: Build constraints
-        constraints = {
-            "cpu_only": cpu_only,
-            "strict_dp": strict_dp,
-        }
-
-        # Step 3: Recommend models
+        # Step 2: Recommend models
         recommendation_request = RecommendationRequest(
             dataset_id=analysis_response.dataset_id,
             dataset_profile=analysis_response.dataset_profile,
             column_analysis=analysis_response.column_analysis,
-            constraints=constraints,
             method=method,
             top_n=top_n,
         )
@@ -431,24 +421,20 @@ async def analyze_and_recommend(
         # In a real app, we might log the full traceback here
         error_msg = str(e)
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"An unexpected error occurred during analysis and recommendation: {error_msg}"
         )
 
 
-@router.get("/models", response_model=Dict[str, Any])
+@router.get("/models", response_model=dict[str, Any])
 async def list_models(
-    model_type: Optional[str] = Query(None, description="Filter by type (GAN, VAE, Diffusion, Tree-based, Statistical)"),
-    cpu_only: Optional[bool] = Query(None, description="Filter by CPU-only compatibility"),
-    requires_dp: Optional[bool] = Query(None, description="Filter by differential privacy support"),
+    model_type: str | None = Query(None, description="Filter by type (GAN, VAE, Diffusion, Tree-based, Statistical)"),
 ):
     """
     List available synthesis models from registry.
 
     **Filters**:
     - `model_type`: Filter by model type (GAN, VAE, Diffusion, Tree-based, Statistical)
-    - `cpu_only`: Filter by CPU-only compatibility
-    - `requires_dp`: Filter by differential privacy support
 
     **Returns**: List of models with capabilities, constraints, and descriptions
     """
@@ -462,14 +448,6 @@ async def list_models(
     for name, info in models.items():
         # Type filter
         if model_type and info.get("type", "").lower() != model_type.lower():
-            continue
-
-        # CPU-only filter
-        if cpu_only and not info.get("constraints", {}).get("cpu_only_compatible", False):
-            continue
-
-        # Differential privacy filter
-        if requires_dp and info.get("capabilities", {}).get("privacy_dp", 0) == 0:
             continue
 
         filtered_models[name] = info
@@ -529,31 +507,31 @@ async def upload_system_prompt(
 ):
     """
     Upload and version system prompt for recommendations.
-    
+
     **Versioning**: Each upload creates a new version in the database
     **Active**: Only one prompt can be active at a time
     **Tracking**: All analyses/recommendations link to the prompt version used
-    
+
     **Returns**: Prompt metadata with version info
     """
     # Validate file type
     if not file.filename.endswith(".md"):
         raise HTTPException(status_code=400, detail="Only Markdown (.md) files are supported")
-    
+
     # Get client info
     ip_address, user_agent = get_client_info(request)
-    
+
     try:
         # Read file content
         content = (await file.read()).decode('utf-8')
-        
+
         # Save to uploads directory
         prompt_dir = Path("./data/uploads/systemprompt")
         prompt_dir.mkdir(parents=True, exist_ok=True)
-        
+
         file_path = prompt_dir / f"{version}_{file.filename}"
         file_path.write_text(content)
-        
+
         # Store in database
         prompt = create_system_prompt(
             version=version,
@@ -561,7 +539,7 @@ async def upload_system_prompt(
             file_path=str(file_path),
             set_active=set_active
         )
-        
+
         # Log audit
         log_audit(
             session_id=None,  # System-level action
@@ -571,7 +549,7 @@ async def upload_system_prompt(
             success=True,
             metadata=f"version={version}, active={set_active}"
         )
-        
+
         return {
             "prompt_id": prompt.prompt_id,
             "version": prompt.version,
@@ -580,7 +558,7 @@ async def upload_system_prompt(
             "file_path": str(file_path),
             "message": f"System prompt {version} uploaded {'and set as active' if set_active else 'successfully'}"
         }
-        
+
     except Exception as e:
         error_msg = log_error(None, "upload_prompt", e)
         raise HTTPException(status_code=500, detail=f"Failed to upload system prompt: {error_msg}")
@@ -590,7 +568,7 @@ async def upload_system_prompt(
 async def list_system_prompts_endpoint():
     """
     List all system prompt versions.
-    
+
     **Returns**: List of all prompts with active status
     """
     prompts = list_system_prompts()
@@ -605,13 +583,13 @@ async def list_system_prompts_endpoint():
 async def get_active_system_prompt():
     """
     Get currently active system prompt.
-    
+
     **Returns**: Active prompt content and metadata
     """
     prompt = get_active_prompt()
     if not prompt:
         raise HTTPException(status_code=404, detail="No active system prompt found")
-    
+
     return {
         "prompt_id": prompt.prompt_id,
         "version": prompt.version,
@@ -624,11 +602,11 @@ async def get_active_system_prompt():
 async def activate_system_prompt(prompt_id: str):
     """
     Set a specific prompt version as active.
-    
+
     **Returns**: Confirmation message
     """
     set_active_prompt(prompt_id)
-    
+
     return {
         "activated": True,
         "prompt_id": prompt_id,
@@ -640,19 +618,19 @@ async def activate_system_prompt(prompt_id: str):
 async def activate_system_prompt_by_version(version: str):
     """
     Set a specific prompt version as active by version string.
-    
+
     **Example**: PUT `/systemprompt/activate/version/v2.0`
-    
+
     **Returns**: Confirmation message with prompt details
     """
     prompt = set_active_prompt_by_version(version)
-    
+
     if not prompt:
         raise HTTPException(
             status_code=404,
             detail=f"System prompt version '{version}' not found"
         )
-    
+
     return {
         "activated": True,
         "prompt_id": prompt.prompt_id,

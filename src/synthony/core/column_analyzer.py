@@ -6,7 +6,6 @@ statistical characteristics. Does NOT make model recommendations -
 that responsibility belongs to the Recommender component.
 """
 
-from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -49,7 +48,7 @@ class ColumnAnalyzer:
         Returns:
             ColumnAnalysisResult with per-column profiles and difficulty scores
         """
-        columns: Dict[str, ColumnProfile] = {}
+        columns: dict[str, ColumnProfile] = {}
 
         for col in df.columns:
             column_profile = self._analyze_column(
@@ -154,8 +153,8 @@ class ColumnAnalyzer:
         self,
         col_name: str,
         unique_count: int,
-        skewness: Optional[float],
-        zipfian_ratio: Optional[float],
+        skewness: float | None,
+        zipfian_ratio: float | None,
         profile: DatasetProfile,
     ) -> ColumnStressFactors:
         """Detect which stress factors affect this column.
@@ -189,8 +188,8 @@ class ColumnAnalyzer:
     def _calculate_difficulty(
         self,
         unique_count: int,
-        skewness: Optional[float],
-        zipfian_ratio: Optional[float],
+        skewness: float | None,
+        zipfian_ratio: float | None,
     ) -> ColumnDifficultyScore:
         """Calculate difficulty scores across dimensions.
 

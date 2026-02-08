@@ -5,7 +5,6 @@ Identifies high-cardinality columns and power-law (Zipfian) distributions
 where a small number of categories dominate the data.
 """
 
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -41,7 +40,7 @@ class CardinalityDetector:
 
     def analyze(
         self, df: pd.DataFrame
-    ) -> Tuple[CardinalityMetrics, ZipfianMetrics]:
+    ) -> tuple[CardinalityMetrics, ZipfianMetrics]:
         """Analyze cardinality and Zipfian patterns.
 
         Cardinality Algorithm:
@@ -68,10 +67,10 @@ class CardinalityDetector:
         Returns:
             Tuple of (CardinalityMetrics, ZipfianMetrics)
         """
-        cardinality_results: Dict[str, int] = {}
-        high_card_cols: List[str] = []
-        zipfian_cols: List[str] = []
-        zipfian_ratio_overall: Optional[float] = None
+        cardinality_results: dict[str, int] = {}
+        high_card_cols: list[str] = []
+        zipfian_cols: list[str] = []
+        zipfian_ratio_overall: float | None = None
 
         # Analyze each column
         for col in df.columns:

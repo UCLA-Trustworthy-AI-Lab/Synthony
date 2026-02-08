@@ -8,42 +8,34 @@ Exposes REST endpoints for:
 - Combined workflow (CSV → Analysis → Recommendation)
 """
 
-import json
-import tempfile
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Union
 from enum import Enum
+from pathlib import Path
+from typing import Any
 
 import pandas as pd
-from fastapi import FastAPI, File, HTTPException, UploadFile, Query, Body, Request, Form
+from fastapi import Body, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from synthony.api.database import (
+    create_analysis,
+    create_dataset,
+    create_session,
+    get_analysis,
+    get_analysis_by_dataset,
+    get_dataset,
+    init_database,
+    log_audit,
+)
+from synthony.api.security import get_client_info, log_error
+from synthony.api.storage import get_storage_manager
 from synthony.core.analyzer import StochasticDataAnalyzer
 from synthony.core.column_analyzer import ColumnAnalyzer
-from synthony.core.schemas import DatasetProfile, ColumnAnalysisResult
+from synthony.core.schemas import ColumnAnalysisResult, DatasetProfile
 from synthony.recommender.engine import (
     ModelRecommendationEngine,
     RecommendationResult,
 )
-from synthony.api.database import (
-    init_database,
-    create_session,
-    create_dataset,
-    create_analysis,
-    log_audit,
-    create_system_prompt,
-    get_active_prompt,
-    list_system_prompts,
-    set_active_prompt,
-    set_active_prompt_by_version,
-    get_dataset,
-    get_analysis_by_dataset,
-    get_analysis,
-)
-from synthony.api.storage import get_storage_manager
-from synthony.api.security import get_client_info, log_error
 
 __version__ = "0.1.0"
 
@@ -73,13 +65,11 @@ class RecommendationRequest(BaseModel):
     """Request model for recommendation from existing profile."""
 
     dataset_id: str = Field(..., description="Dataset identifier")
-    analysis_id: Optional[str] = Field(None, description="Analysis ID to retrieve cached profile (optional if dataset_profile provided)")
-    dataset_profile: Optional[Dict[str, Any]] = Field(None, description="Dataset profile from StochasticDataAnalyzer (optional if analysis_id provided)")
-    column_analysis: Optional[Dict[str, Any]] = Field(
+    analysis_id: str | None = Field(None, description="Analysis ID to retrieve cached profile (optional if dataset_profile provided)")
+    dataset_profile: dict[str, Any] | None = Field(None, description="Dataset profile from StochasticDataAnalyzer (optional if analysis_id provided)")
+    dataset_profile_id: str | None = Field(None, description="Dataset profile ID to retrieve stored profile (alternative to analysis_id)")
+    column_analysis: dict[str, Any] | None = Field(
         None, description="Optional column-level analysis"
-    )
-    constraints: Optional[Dict[str, Any]] = Field(
-        default_factory=dict, description="User constraints (cpu_only, strict_dp, etc.)"
     )
     method: RecommendationMethod = Field(
         default=RecommendationMethod.hybrid, description="Recommendation method"
@@ -93,8 +83,8 @@ class AnalysisResponse(BaseModel):
     session_id: str
     analysis_id: str
     dataset_id: str
-    dataset_profile: Dict[str, Any]
-    column_analysis: Dict[str, Any]
+    dataset_profile: dict[str, Any]
+    column_analysis: dict[str, Any]
     message: str = "Analysis completed successfully"
 
 
@@ -104,12 +94,12 @@ class ModelInfoResponse(BaseModel):
     model_name: str
     full_name: str
     type: str
-    capabilities: Dict[str, int]
-    constraints: Dict[str, Any]
-    performance: Dict[str, str]
+    capabilities: dict[str, int]
+    constraints: dict[str, Any]
+    performance: dict[str, str]
     description: str
-    strengths: List[str]
-    limitations: List[str]
+    strengths: list[str]
+    limitations: list[str]
 
 
 class HealthResponse(BaseModel):
@@ -136,7 +126,6 @@ app = FastAPI(
     - Dataset profiling (Skewness, Cardinality, Zipfian, Correlation analysis)
     - Model recommendation (13+ SOTA models from table-synthesizers)
     - Hybrid rule-based + LLM decision engine
-    - Support for user constraints (CPU-only, Differential Privacy, data size)
 
     **Recommendation Methods**:
     - `rule_based`: Fast deterministic scoring (no API key needed)
@@ -161,16 +150,16 @@ app.add_middleware(
 # Global State (Initialized on startup)
 # ============================================================================
 
-analyzer: Optional[StochasticDataAnalyzer] = None
-column_analyzer: Optional[ColumnAnalyzer] = None
-recommender: Optional[ModelRecommendationEngine] = None
+analyzer: StochasticDataAnalyzer | None = None
+column_analyzer: ColumnAnalyzer | None = None
+recommender: ModelRecommendationEngine | None = None
 
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize analyzers and recommendation engine on startup."""
     import os
-    from pathlib import Path
+
     from dotenv import load_dotenv
     global analyzer, column_analyzer, recommender
 
@@ -239,7 +228,9 @@ async def startup_event():
 # Include Endpoints Router
 # ============================================================================
 
-from synthony.api.endpoints import router as api_router
+# Import after app creation to avoid circular dependency (endpoints imports from server)
+from synthony.api.endpoints import router as api_router  # noqa: E402
+
 app.include_router(api_router)
 
 # ============================================================================
@@ -247,7 +238,7 @@ app.include_router(api_router)
 # ============================================================================
 
 
-@app.get("/", response_model=Dict[str, str])
+@app.get("/", response_model=dict[str, str])
 async def root():
     """Root endpoint with API information."""
     return {
@@ -283,7 +274,7 @@ async def health_check():
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_dataset(
     file: UploadFile = File(..., description="CSV or Parquet file to analyze"),
-    dataset_id: Optional[str] = Query(None, description="Optional dataset identifier"),
+    dataset_id: str | None = Query(None, description="Optional dataset identifier"),
     request: Request = None,
 ):
     """
@@ -339,7 +330,7 @@ async def analyze_dataset(
 
         # Load as DataFrame
         if file.filename.endswith(".csv"):
-            df = pd.read_csv(file_path) 
+            df = pd.read_csv(file_path)
         elif file.filename.endswith(".parquet"):
             df = pd.read_parquet(file_path)
         else:
@@ -417,9 +408,8 @@ async def recommend_model(request: RecommendationRequest = Body(...)):
     **Process**:
     1. If analysis_id provided: Retrieve from database
     2. Otherwise: Use provided dataset_profile + column_analysis
-    3. Apply user constraints (cpu_only, strict_dp, etc.)
-    4. Run recommendation engine (rule_based / llm / hybrid)
-    5. Return ranked models with reasoning
+    3. Run recommendation engine (rule_based / llm / hybrid)
+    4. Return ranked models with reasoning
 
     **Recommendation Methods**:
     - `rule_based`: Fast scoring based on capability matrix (no API key needed)
@@ -435,18 +425,18 @@ async def recommend_model(request: RecommendationRequest = Body(...)):
         # Mode 1: Retrieve from database using analysis_id
         if request.analysis_id:
             analysis = get_analysis(request.analysis_id)
-            
+
             if not analysis:
                 raise HTTPException(
                     status_code=404,
                     detail=f"No analysis found for analysis_id '{request.analysis_id}'. Please run /analyze first."
                 )
-            
+
             # Deserialize stored analysis
             import json
             dataset_profile = DatasetProfile(**json.loads(analysis.profile_json))
             column_analysis = ColumnAnalysisResult(**json.loads(analysis.column_analysis_json)) if analysis.column_analysis_json else None
-        
+
         # Mode 2: Use provided profile
         elif request.dataset_profile:
             # Convert dictionaries to Pydantic objects if needed
@@ -459,7 +449,7 @@ async def recommend_model(request: RecommendationRequest = Body(...)):
                 column_analysis = ColumnAnalysisResult(**request.column_analysis)
             else:
                 column_analysis = request.column_analysis
-        
+
         # Validation: must have either analysis_id or dataset_profile
         else:
             raise HTTPException(
@@ -471,7 +461,6 @@ async def recommend_model(request: RecommendationRequest = Body(...)):
         result = recommender.recommend(
             dataset_profile=dataset_profile,
             column_analysis=column_analysis,
-            constraints=request.constraints,
             method=request.method.value,
             top_n=request.top_n,
         )
@@ -483,16 +472,14 @@ async def recommend_model(request: RecommendationRequest = Body(...)):
         raise HTTPException(status_code=500, detail=f"Recommendation failed: {str(e)}")
 
 
-@app.post("/analyze-and-recommend", response_model=Dict[str, Any])
+@app.post("/analyze-and-recommend", response_model=dict[str, Any])
 async def analyze_and_recommend(
     request: Request = None,
     file: UploadFile = File(default=None),
-    dataset_id: Optional[str] = Query(None, description="Dataset identifier (for reusing existing analysis or new upload)"),
+    dataset_id: str | None = Query(None, description="Dataset identifier (for reusing existing analysis or new upload)"),
     method: RecommendationMethod = Query(
         RecommendationMethod.hybrid, description="Recommendation method"
     ),
-    cpu_only: bool = Query(False, description="CPU-only constraint (exclude GPU models)"),
-    strict_dp: bool = Query(False, description="Strict DP requirement"),
     top_n: int = Query(3, ge=1, le=10, description="Top N alternatives"),
 ):
     """
@@ -505,9 +492,8 @@ async def analyze_and_recommend(
     **Process**:
     1. If file provided: Upload and analyze
     2. If dataset_id only: Retrieve from database
-    3. Apply constraints
-    4. Generate recommendations
-    5. Return combined result
+    3. Generate recommendations
+    4. Return combined result
 
     **Returns**: Combined response with analysis + recommendation
     """
@@ -529,27 +515,27 @@ async def analyze_and_recommend(
     if file:
         # Step 1: Analyze dataset (will create new entry or update existing if dataset_id provided)
         analysis_response = await analyze_dataset(file=file, dataset_id=dataset_id, request=request)
-    
+
     # Mode 2: Use existing dataset
     else:
         # Retrieve existing analysis from database
         analysis = get_analysis_by_dataset(dataset_id)
-        
+
         if not analysis:
             raise HTTPException(
                 status_code=404,
                 detail=f"No analysis found for dataset_id '{dataset_id}'. Please upload the dataset first using /analyze endpoint."
             )
-        
+
         # Deserialize stored analysis
         import json
         profile_dict = json.loads(analysis.profile_json)
         column_dict = json.loads(analysis.column_analysis_json)
-        
+
         # Get session_id from dataset
         dataset = get_dataset(dataset_id)
         session_id = dataset.session_id if dataset else None
-        
+
         # Create response object matching analyze_dataset output
         analysis_response = AnalysisResponse(
             session_id=session_id,
@@ -560,25 +546,18 @@ async def analyze_and_recommend(
             message=f"Using cached analysis from {analysis.created_at.isoformat()}"
         )
 
-    # Step 2: Build constraints
-    constraints = {
-        "cpu_only": cpu_only,
-        "strict_dp": strict_dp,
-    }
-
-    # Step 3: Recommend models
+    # Step 2: Recommend models
     recommendation_request = RecommendationRequest(
         dataset_id=analysis_response.dataset_id,
         dataset_profile=analysis_response.dataset_profile,
         column_analysis=analysis_response.column_analysis,
-        constraints=constraints,
         method=method,
         top_n=top_n,
     )
 
     recommendation_result = await recommend_model(request=recommendation_request)
 
-    # Step 4: Combine results
+    # Step 3: Combine results
     return {
         "dataset_id": analysis_response.dataset_id,
         "analysis": {
@@ -589,19 +568,15 @@ async def analyze_and_recommend(
     }
 
 
-@app.get("/models", response_model=Dict[str, Any])
+@app.get("/models", response_model=dict[str, Any])
 async def list_models(
-    model_type: Optional[str] = Query(None, description="Filter by type (GAN, VAE, Diffusion, Tree-based, Statistical)"),
-    cpu_only: Optional[bool] = Query(None, description="Filter by CPU-only compatibility"),
-    requires_dp: Optional[bool] = Query(None, description="Filter by differential privacy support"),
+    model_type: str | None = Query(None, description="Filter by type (GAN, VAE, Diffusion, Tree-based, Statistical)"),
 ):
     """
     List available synthesis models from registry.
 
     **Filters**:
     - `model_type`: Filter by model type (GAN, VAE, Diffusion, Tree-based, Statistical)
-    - `cpu_only`: Filter by CPU-only compatibility
-    - `requires_dp`: Filter by differential privacy support
 
     **Returns**: List of models with capabilities, constraints, and descriptions
     """
@@ -615,14 +590,6 @@ async def list_models(
     for name, info in models.items():
         # Type filter
         if model_type and info.get("type", "").lower() != model_type.lower():
-            continue
-
-        # CPU-only filter
-        if cpu_only and not info.get("constraints", {}).get("cpu_only_compatible", False):
-            continue
-
-        # Differential privacy filter
-        if requires_dp and info.get("capabilities", {}).get("privacy_dp", 0) == 0:
             continue
 
         filtered_models[name] = info

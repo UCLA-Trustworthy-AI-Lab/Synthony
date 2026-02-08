@@ -2,10 +2,10 @@
 Pytest configuration and fixtures for Synthony tests.
 """
 
+
 import numpy as np
 import pandas as pd
 import pytest
-from pathlib import Path
 from scipy.stats import lognorm
 
 
@@ -61,3 +61,21 @@ def temp_parquet_file(tmp_path, sample_normal_df):
     parquet_path = tmp_path / "test.parquet"
     sample_normal_df.to_parquet(parquet_path, index=False)
     return parquet_path
+
+
+@pytest.fixture
+def sample_titanic_df():
+    """Load Titanic sample dataset for realistic testing."""
+    from pathlib import Path
+    csv_path = Path(__file__).parent / "data" / "titanic_sample.csv"
+    if csv_path.exists():
+        return pd.read_csv(csv_path)
+    # Fallback to synthetic data if sample not present
+    np.random.seed(42)
+    return pd.DataFrame({
+        "survived": np.random.choice([0, 1], 100),
+        "pclass": np.random.choice([1, 2, 3], 100),
+        "age": np.random.uniform(1, 80, 100),
+        "fare": np.random.exponential(30, 100),
+        "sex": np.random.choice(["male", "female"], 100),
+    })

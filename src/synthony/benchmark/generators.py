@@ -6,7 +6,6 @@ model recommendations and stress detection algorithms.
 """
 
 from pathlib import Path
-from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -211,7 +210,7 @@ class BenchmarkDatasetGenerator:
         return df
 
     @staticmethod
-    def save_benchmarks(output_dir: Union[Path, str]) -> None:
+    def save_benchmarks(output_dir: Path | str) -> None:
         """Generate and save all three benchmark datasets to disk.
 
         Creates all benchmark datasets and saves them as CSV files
@@ -253,4 +252,3 @@ class BenchmarkDatasetGenerator:
 
 
 # Backwards compatibility
-from typing import Union  # Already imported above, but keeping for clarity

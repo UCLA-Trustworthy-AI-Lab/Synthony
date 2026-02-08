@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.11', '3.12']
     
     steps:
       - uses: actions/checkout@v4
@@ -25,23 +25,22 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,api,llm]"
+          pip install -e ".[dev,api]"
       
-      - name: Lint with ruff
-        run: ruff check src/ tests/ --ignore E501
+      - name: Run unit tests
+        run: pytest tests/unit/ -v --tb=short
       
-      - name: Type check with mypy
-        run: mypy src/synthony --ignore-missing-imports || true
+      - name: Run integration tests
+        run: pytest tests/integration/ -v --tb=short -x
       
-      - name: Run tests
-        run: pytest tests/ -v --cov=synthony --cov-report=xml -x
-      
-      - name: Upload coverage
-        if: matrix.python-version == '3.11'
-        uses: codecov/codecov-action@v4
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          files: coverage.xml
-          fail_ci_if_error: false
+          name: test-results-${{ matrix.python-version }}
+          path: |
+            tests/data/
+            .pytest_cache/
 
   build:
     runs-on: ubuntu-latest

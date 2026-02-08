@@ -5,9 +5,10 @@ Ensures API responses maintain backward compatibility.
 """
 
 import io
-import pytest
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
 from synthony.api.server import app
@@ -183,7 +184,6 @@ class TestRecommendEndpointSchema:
             "/recommend",
             json={
                 "dataset_profile": profile,
-                "constraints": {"cpu_only": False, "strict_dp": False},
                 "method": "rule_based",
                 "top_n": 3,
             },
@@ -250,7 +250,6 @@ class TestAnalyzeAndRecommendSchema:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("test.csv", csv_buffer, "text/csv")},
@@ -298,7 +297,6 @@ class TestBackwardCompatibility:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("test.csv", csv_buffer, "text/csv")},
@@ -307,7 +305,7 @@ class TestBackwardCompatibility:
         assert response.status_code == 200
         data = response.json()
 
-        # Expected schema (version 0.1.0)
+        # Expected schema (version 0.2.0 - constraints removed)
         expected_structure = {
             "analysis": {
                 "dataset_profile": {
@@ -370,7 +368,6 @@ class TestBackwardCompatibility:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("test.csv", csv_buffer, "text/csv")},
@@ -406,7 +403,6 @@ class TestErrorResponseConsistency:
         response = client.post(
             "/recommend",
             json={
-                "constraints": {"cpu_only": False, "strict_dp": False},
                 # Missing required 'dataset_profile' field
             },
         )

@@ -5,11 +5,12 @@ Ensures that known datasets always produce consistent recommendations.
 """
 
 import io
-import pytest
-import pandas as pd
+
 import numpy as np
-from scipy.stats import lognorm
+import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
+from scipy.stats import lognorm
 
 from synthony.api.server import app
 from synthony.benchmark.generators import BenchmarkDatasetGenerator
@@ -66,7 +67,6 @@ class TestBenchmarkBaselineRecommendations:
             params={
                 "dataset_id": "baseline_long_tail",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 5,
             },
             files={"file": ("long_tail.csv", csv_buffer, "text/csv")},
@@ -110,7 +110,6 @@ class TestBenchmarkBaselineRecommendations:
             params={
                 "dataset_id": "baseline_needle",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 5,
             },
             files={"file": ("needle.csv", csv_buffer, "text/csv")},
@@ -145,7 +144,6 @@ class TestBenchmarkBaselineRecommendations:
             params={
                 "dataset_id": "baseline_small",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 5,
             },
             files={"file": ("small.csv", csv_buffer, "text/csv")},
@@ -207,7 +205,6 @@ class TestKnownDatasetConsistency:
                 params={
                     "dataset_id": f"titanic_run_{i}",
                     "method": "rule_based",
-                    "cpu_only": False,
                     "top_n": 3,
                 },
                 files={"file": ("titanic.csv", csv_buffer, "text/csv")},
@@ -249,86 +246,6 @@ class TestKnownDatasetConsistency:
         assert stress_factors_list[0] == stress_factors_list[1]
 
 
-class TestConstraintConsistency:
-    """Test that constraints produce consistent filtering."""
-
-    @pytest.fixture
-    def test_data(self):
-        """Create test dataset."""
-        np.random.seed(42)
-        return pd.DataFrame({
-            "col1": np.random.randn(1000),
-            "col2": lognorm.rvs(s=0.95, scale=np.exp(5), size=1000, random_state=42),
-            "col3": np.random.choice(["A", "B", "C"], 1000),
-        })
-
-    def test_cpu_constraint_consistency(self, client, test_data):
-        """CPU constraint should consistently exclude GPU models."""
-        # Run 3 times
-        for i in range(3):
-            csv_buffer = io.BytesIO()
-            test_data.to_csv(csv_buffer, index=False)
-            csv_buffer.seek(0)
-
-            response = client.post(
-                "/analyze-and-recommend",
-                params={
-                    "dataset_id": f"cpu_test_{i}",
-                    "method": "rule_based",
-                    "cpu_only": True,
-                    "top_n": 5,
-                },
-                files={"file": ("test.csv", csv_buffer, "text/csv")},
-            )
-
-            assert response.status_code == 200
-            data = response.json()
-
-            # GPU models should NEVER be recommended with cpu_only=True
-            gpu_models = {"TabDDPM", "TabSyn", "GReaT"}
-
-            rec_model = data["recommendation"]["recommended_model"]["model_name"]
-            assert rec_model not in gpu_models
-
-            # Check alternatives
-            if "alternative_models" in data["recommendation"]:
-                for alt in data["recommendation"]["alternative_models"]:
-                    assert alt["model_name"] not in gpu_models
-
-    def test_dp_constraint_consistency(self, client, test_data):
-        """DP constraint should consistently include only DP models."""
-        for i in range(3):
-            csv_buffer = io.BytesIO()
-            test_data.to_csv(csv_buffer, index=False)
-            csv_buffer.seek(0)
-
-            response = client.post(
-                "/analyze-and-recommend",
-                params={
-                    "dataset_id": f"dp_test_{i}",
-                    "method": "rule_based",
-                    "cpu_only": False,
-                    "strict_dp": True,
-                    "top_n": 3,
-                },
-                files={"file": ("test.csv", csv_buffer, "text/csv")},
-            )
-
-            assert response.status_code == 200
-            data = response.json()
-
-            # Only DP models should be recommended
-            dp_models = {"PATE-CTGAN", "AIM", "DPCART"}
-
-            rec_model = data["recommendation"]["recommended_model"]["model_name"]
-            assert rec_model in dp_models
-
-            # Check alternatives
-            if "alternative_models" in data["recommendation"]:
-                for alt in data["recommendation"]["alternative_models"]:
-                    assert alt["model_name"] in dp_models
-
-
 class TestConfidenceScoreRegression:
     """Test that confidence scores remain in expected ranges."""
 
@@ -347,7 +264,6 @@ class TestConfidenceScoreRegression:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("clear_case.csv", csv_buffer, "text/csv")},
@@ -379,7 +295,6 @@ class TestConfidenceScoreRegression:
                 params={
                     "dataset_id": f"confidence_test_{idx}",
                     "method": "rule_based",
-                    "cpu_only": False,
                     "top_n": 5,
                 },
                 files={"file": ("test.csv", csv_buffer, "text/csv")},

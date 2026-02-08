@@ -2,6 +2,7 @@
 """Simple test script to verify OpenAI API connection using .env credentials."""
 
 import os
+
 from dotenv import load_dotenv
 from openai import OpenAI
 

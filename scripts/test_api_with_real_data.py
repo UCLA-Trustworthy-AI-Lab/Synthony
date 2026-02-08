@@ -43,7 +43,7 @@ def wait_for_server(max_attempts: int = 30, delay: float = 1.0):
     return False
 
 
-def test_single_dataset(csv_path: Path, method: str = "rule_based", cpu_only: bool = True):
+def test_single_dataset(csv_path: Path, method: str = "rule_based"):
     """Test API with a single dataset."""
     dataset_name = csv_path.stem
     print(f"\n{'─' * 80}")
@@ -58,7 +58,6 @@ def test_single_dataset(csv_path: Path, method: str = "rule_based", cpu_only: bo
                 params={
                     "dataset_id": dataset_name,
                     "method": method,
-                    "cpu_only": cpu_only,
                     "top_n": 3,
                 },
                 files={"file": f},
@@ -278,7 +277,7 @@ def main():
     for i, csv_file in enumerate(csv_files, 1):
         print(f"\n[{i}/{len(csv_files)}]", end=" ")
 
-        result = test_single_dataset(csv_file, method=method, cpu_only=True)
+        result = test_single_dataset(csv_file, method=method)
 
         if result:
             results[csv_file.stem] = result

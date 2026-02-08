@@ -4,7 +4,6 @@ Data size classification.
 Classifies datasets as small or large based on row count thresholds.
 """
 
-from typing import Dict
 
 
 class DataSizeClassifier:
@@ -31,7 +30,7 @@ class DataSizeClassifier:
         self.small_threshold = small_threshold
         self.large_threshold = large_threshold
 
-    def classify(self, row_count: int) -> Dict[str, bool]:
+    def classify(self, row_count: int) -> dict[str, bool]:
         """Simple threshold-based classification.
 
         Args:

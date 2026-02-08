@@ -5,10 +5,11 @@ Tests complete user workflows: upload CSV → analyze → recommend → get resu
 """
 
 import io
+
+import numpy as np
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
-import pandas as pd
-import numpy as np
 
 # Import the FastAPI app
 from synthony.api.server import app
@@ -105,30 +106,6 @@ class TestModelEndpoints:
             assert "type" in model
             assert "supports_gpu" in model
             assert "supports_dp" in model
-
-    def test_list_cpu_only_models(self, client):
-        """Filter models by CPU-only."""
-        response = client.get("/models?cpu_only=true")
-
-        assert response.status_code == 200
-        data = response.json()
-
-        # All models should be CPU-compatible
-        for model in data["models"]:
-            # GPU-dependent models should be excluded
-            assert model["name"] not in ["TabDDPM", "TabSyn", "GReaT"]
-
-    def test_list_dp_models(self, client):
-        """Filter models by differential privacy."""
-        response = client.get("/models?supports_dp=true")
-
-        assert response.status_code == 200
-        data = response.json()
-
-        # All models should support DP
-        dp_models = {"PATE-CTGAN", "AIM", "DPCART"}
-        for model in data["models"]:
-            assert model["name"] in dp_models
 
     def test_get_model_details(self, client):
         """Get details for a specific model."""
@@ -242,10 +219,6 @@ class TestRecommendEndpoint:
             "/recommend",
             json={
                 "dataset_profile": analysis["dataset_profile"],
-                "constraints": {
-                    "cpu_only": False,
-                    "strict_dp": False,
-                },
                 "method": "rule_based",
                 "top_n": 3,
             },
@@ -263,66 +236,6 @@ class TestRecommendEndpoint:
         assert "reasoning" in rec
         assert len(rec["reasoning"]) > 0
 
-    def test_recommend_with_cpu_constraint(self, client, sample_csv_file):
-        """Recommend with CPU-only constraint."""
-        # Analyze first
-        analyze_response = client.post(
-            "/analyze",
-            files={"file": sample_csv_file},
-        )
-
-        analysis = analyze_response.json()
-
-        # Recommend with CPU constraint
-        recommend_response = client.post(
-            "/recommend",
-            json={
-                "dataset_profile": analysis["dataset_profile"],
-                "constraints": {
-                    "cpu_only": True,
-                    "strict_dp": False,
-                },
-                "method": "rule_based",
-                "top_n": 5,
-            },
-        )
-
-        assert recommend_response.status_code == 200
-        data = recommend_response.json()
-
-        # Should not recommend GPU models
-        gpu_models = {"TabDDPM", "TabSyn", "GReaT"}
-        assert data["recommended_model"]["model_name"] not in gpu_models
-
-    def test_recommend_with_dp_constraint(self, client, sample_csv_file):
-        """Recommend with differential privacy constraint."""
-        analyze_response = client.post(
-            "/analyze",
-            files={"file": sample_csv_file},
-        )
-
-        analysis = analyze_response.json()
-
-        recommend_response = client.post(
-            "/recommend",
-            json={
-                "dataset_profile": analysis["dataset_profile"],
-                "constraints": {
-                    "cpu_only": False,
-                    "strict_dp": True,
-                },
-                "method": "rule_based",
-                "top_n": 3,
-            },
-        )
-
-        assert recommend_response.status_code == 200
-        data = recommend_response.json()
-
-        # Should only recommend DP models
-        dp_models = {"PATE-CTGAN", "AIM", "DPCART"}
-        assert data["recommended_model"]["model_name"] in dp_models
-
 
 class TestAnalyzeAndRecommendEndpoint:
     """Test one-shot analyze-and-recommend endpoint."""
@@ -333,7 +246,6 @@ class TestAnalyzeAndRecommendEndpoint:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": sample_csv_file},
@@ -357,34 +269,12 @@ class TestAnalyzeAndRecommendEndpoint:
         assert "model_name" in rec
         assert "confidence_score" in rec
 
-    def test_one_shot_with_constraints(self, client, sample_csv_file):
-        """One-shot with CPU constraint."""
-        response = client.post(
-            "/analyze-and-recommend",
-            params={
-                "method": "rule_based",
-                "cpu_only": True,
-                "strict_dp": False,
-                "top_n": 5,
-            },
-            files={"file": sample_csv_file},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-
-        # Should not recommend GPU models
-        gpu_models = {"TabDDPM", "TabSyn", "GReaT"}
-        rec_model = data["recommendation"]["recommended_model"]["model_name"]
-        assert rec_model not in gpu_models
-
     def test_one_shot_with_small_data(self, client, small_csv_file):
         """One-shot with small dataset."""
         response = client.post(
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": small_csv_file},
@@ -414,7 +304,6 @@ class TestAnalyzeAndRecommendEndpoint:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": skewed_csv_file},
@@ -438,7 +327,6 @@ class TestAnalyzeAndRecommendEndpoint:
             "/analyze-and-recommend",
             params={
                 "method": "hybrid",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": sample_csv_file},

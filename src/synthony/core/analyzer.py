@@ -1,17 +1,16 @@
 from pathlib import Path
-from typing import Dict, Optional, Union
 
 import pandas as pd
-import numpy as np
 
+from synthony.core.errors import ValidationError
 from synthony.core.loaders import DataLoader
 from synthony.core.schemas import DatasetProfile, StressFactors
 from synthony.detectors.cardinality import CardinalityDetector
 from synthony.detectors.correlation import CorrelationDetector
 from synthony.detectors.data_size import DataSizeClassifier
 from synthony.detectors.skewness import SkewnessDetector
-from synthony.utils.constants import AnalyzerConfig, DEFAULT_CONFIG
-from synthony.core.Errors import ValidationError, UnsupportedFormatError
+from synthony.utils.constants import DEFAULT_CONFIG, AnalyzerConfig
+
 
 class StochasticDataAnalyzer:
     """
@@ -26,11 +25,11 @@ class StochasticDataAnalyzer:
         print(f"Severe skew: {profile.stress_factors.severe_skew}")
         print(f"Zipfian: {profile.stress_factors.zipfian_distribution}")
 
-        profile_json = profile.to_json()        
+        profile_json = profile.to_json()
         ```
     """
 
-    def __init__(self, config: Optional[AnalyzerConfig] = None):
+    def __init__(self, config: AnalyzerConfig | None = None):
         """Initialize analyzer with optional threshold overrides.
 
         Args:
@@ -58,7 +57,7 @@ class StochasticDataAnalyzer:
             large_threshold=self.config.large_data_threshold,
         )
 
-    def analyze(self, data: Union[pd.DataFrame, Path, str]) -> DatasetProfile:
+    def analyze(self, data: pd.DataFrame | Path | str) -> DatasetProfile:
         """Comprehensive analysis returning structured profile.
 
         This is the main entry point. Accepts either a DataFrame or
@@ -72,7 +71,7 @@ class StochasticDataAnalyzer:
             DatasetProfile with stress factors and detailed metrics
 
         Raises:
-            ValidationError: If data is malformed 
+            ValidationError: If data is malformed
             WrongFormatError: If not in supported format (csv or parquet)
             FileNotFoundError: file not found at path
             ValueError: file is a supported format but not readable or empty
@@ -143,8 +142,8 @@ class StochasticDataAnalyzer:
         )
 
         # Calculate data quality metrics
-        null_percentage: Dict[str, float] = {}
-        column_types: Dict[str, str] = {}
+        null_percentage: dict[str, float] = {}
+        column_types: dict[str, str] = {}
 
         for col in df.columns:
             # Null percentage
@@ -179,7 +178,7 @@ class StochasticDataAnalyzer:
         return profile
 
     def analyze_from_file(
-        self, path: Union[Path, str], file_format: Optional[str] = None
+        self, path: Path | str, file_format: str | None = None
     ) -> DatasetProfile:
         """Load file and analyze (auto-detects format).
 
@@ -264,21 +263,21 @@ class StochasticDataAnalyzer:
                 "n_rows": profile.row_count,
                 "n_columns": profile.column_count,
                 "column_types": {
-                    "numeric": profile.n_numeric_columns, 
+                    "numeric": profile.n_numeric_columns,
                     "categorical": profile.n_categorical_columns,
                     "object": profile.n_object_columns,
                     "other": profile.n_other_columns
                 },
                 "numeric_stats": {
-                    "max_skewness": profile.max_skewness, 
+                    "max_skewness": profile.max_skewness,
                     "has_multimodal": profile.has_multimodal
                 },
                 "higher-order": {
-                    "max_order": profile.max_order, 
+                    "max_order": profile.max_order,
                     "has_higher_order": profile.has_higher_order
                 },
                 "categorical_stats": {
-                    "max_cardinality": profile.max_cardinality, 
+                    "max_cardinality": profile.max_cardinality,
                     "distribution_shape": profile.distribution_shape},
                 "correlation_stats": {
                     "complexity": profile.correlation_complexity
@@ -294,7 +293,7 @@ class StochasticDataAnalyzer:
             }
         }
     @staticmethod
-    def to_json(self,profile: DatasetProfile, path: Optional[Union[Path, str]] = None) -> str:
+    def to_json(self,profile: DatasetProfile, path: Path | str | None = None) -> str:
         """Serialize profile to JSON (optionally save to file).
 
         Args:
@@ -316,9 +315,10 @@ class StochasticDataAnalyzer:
         """
         json_str = self._json_formatter(profile)
 
-        if path is not None and os.path.exists(path):
-            path = Path(path)
-            path.write_text(json_str)
+        if path is not None:
+            path_obj = Path(path)
+            path_obj.parent.mkdir(parents=True, exist_ok=True)
+            path_obj.write_text(json_str)
         return json_str
 
 class ColumnProfile:

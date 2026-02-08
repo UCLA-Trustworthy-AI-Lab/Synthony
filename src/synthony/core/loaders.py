@@ -7,11 +7,11 @@ to ensure data quality before analysis.
 
 import warnings
 from pathlib import Path
-from typing import Any, List, Optional, Union
+from typing import Any
 
 import pandas as pd
 
-from synthony.core.Errors import ValidationError, UnsupportedFormatError
+from synthony.core.errors import ValidationError
 
 
 class ValidationResult:
@@ -20,8 +20,8 @@ class ValidationResult:
     def __init__(
         self,
         is_valid: bool,
-        errors: Optional[List[str]] = None,
-        warnings_list: Optional[List[str]] = None,
+        errors: list[str] | None = None,
+        warnings_list: list[str] | None = None,
     ):
         self.is_valid = is_valid
         self.errors = errors or []
@@ -145,8 +145,8 @@ class DataLoader:
 
     @staticmethod
     def load(
-        path: Union[str, Path],
-        file_format: Optional[str] = None,
+        path: str | Path,
+        file_format: str | None = None,
         validate: bool = True,
         **kwargs: Any,
     ) -> pd.DataFrame:
@@ -201,8 +201,8 @@ class DataLoader:
         Returns:
             ValidationResult with errors and warnings
         """
-        errors: List[str] = []
-        warnings_list: List[str] = []
+        errors: list[str] = []
+        warnings_list: list[str] = []
 
         # Check if empty
         if df.empty or df.shape[0] == 0:

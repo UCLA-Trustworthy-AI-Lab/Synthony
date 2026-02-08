@@ -5,10 +5,11 @@ Tests rule-based, LLM, and hybrid recommendation approaches.
 """
 
 import io
+
+import numpy as np
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
-import pandas as pd
-import numpy as np
 
 from synthony.api.server import app
 
@@ -54,7 +55,6 @@ class TestRuleBasedMethod:
             params={
                 "dataset_id": "test_deterministic",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": titanic_like_csv},
@@ -83,7 +83,6 @@ class TestRuleBasedMethod:
             params={
                 "dataset_id": "test_deterministic",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("titanic.csv", csv_buffer2, "text/csv")},
@@ -115,7 +114,6 @@ class TestRuleBasedMethod:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": titanic_like_csv},
@@ -133,7 +131,6 @@ class TestRuleBasedMethod:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": titanic_like_csv},
@@ -181,7 +178,7 @@ class TestLLMMethod:
             # Try LLM mode
             response = client.post(
                 "/analyze-and-recommend",
-                params={"method": "llm", "cpu_only": False, "top_n": 3},
+                params={"method": "llm", "top_n": 3},
                 files={"file": ("test.csv", csv_buffer, "text/csv")},
             )
 
@@ -194,7 +191,6 @@ class TestLLMMethod:
             "/analyze-and-recommend",
             params={
                 "method": "llm",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": titanic_like_csv},
@@ -219,7 +215,6 @@ class TestHybridMethod:
             "/analyze-and-recommend",
             params={
                 "method": "hybrid",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": titanic_like_csv},
@@ -241,7 +236,6 @@ class TestHybridMethod:
             "/analyze-and-recommend",
             params={
                 "method": "hybrid",
-                "cpu_only": False,
                 "top_n": 5,
             },
             files={"file": titanic_like_csv},
@@ -294,7 +288,6 @@ class TestMethodComparison:
                 "/analyze-and-recommend",
                 params={
                     "method": method,
-                    "cpu_only": False,
                     "top_n": 3,
                 },
                 files={"file": ("titanic.csv", csv_buffer, "text/csv")},
@@ -353,7 +346,7 @@ class TestMethodComparison:
         start = time.time()
         response = client.post(
             "/analyze-and-recommend",
-            params={"method": "rule_based", "cpu_only": False, "top_n": 3},
+            params={"method": "rule_based", "top_n": 3},
             files={"file": ("titanic.csv", csv_buffer, "text/csv")},
         )
         times["rule_based"] = time.time() - start

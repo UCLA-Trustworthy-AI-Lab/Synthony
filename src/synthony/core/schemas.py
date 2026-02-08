@@ -6,7 +6,7 @@ ensuring type safety and JSON serialization compatibility.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -15,11 +15,11 @@ from pydantic import BaseModel, Field
 class SkewnessMetrics(BaseModel):
     """Per-column skewness analysis results."""
 
-    column_scores: Dict[str, float] = Field(
+    column_scores: dict[str, float] = Field(
         default_factory=dict, description="Skewness coefficient for each numeric column"
     )
     max_skewness: float = Field(description="Maximum absolute skewness across all columns")
-    severe_columns: List[str] = Field(
+    severe_columns: list[str] = Field(
         default_factory=list, description="Columns with |skewness| > threshold (default 2.0)"
     )
 
@@ -29,11 +29,11 @@ class SkewnessMetrics(BaseModel):
 class CardinalityMetrics(BaseModel):
     """Per-column cardinality (unique value count) analysis."""
 
-    column_counts: Dict[str, int] = Field(
+    column_counts: dict[str, int] = Field(
         default_factory=dict, description="Number of unique values per column"
     )
     max_cardinality: int = Field(description="Maximum cardinality across all columns")
-    high_cardinality_columns: List[str] = Field(
+    high_cardinality_columns: list[str] = Field(
         default_factory=list, description="Columns with unique count > threshold (default 500)"
     )
 
@@ -44,11 +44,11 @@ class ZipfianMetrics(BaseModel):
     """Zipfian (power-law) distribution detection results."""
 
     detected: bool = Field(description="Whether Zipfian distribution was detected in any column")
-    top_20_percent_ratio: Optional[float] = Field(
+    top_20_percent_ratio: float | None = Field(
         default=None,
         description="Concentration ratio: fraction of data in top 20% of categories (max across columns)",
     )
-    affected_columns: List[str] = Field(
+    affected_columns: list[str] = Field(
         default_factory=list, description="Categorical columns exhibiting Zipfian behavior"
     )
 
@@ -67,7 +67,7 @@ class CorrelationMetrics(BaseModel):
     has_higher_order: bool = Field(
         description="True if dense correlations but low linear R² (indicates non-linear relationships)"
   )
-    correlation_matrix: Optional[Any] = Field(
+    correlation_matrix: Any | None = Field(
         default=None,
         description="Pandas DataFrame containing the correlation matrix (optional)"
     )
@@ -119,29 +119,29 @@ class DatasetProfile(BaseModel):
     stress_factors: StressFactors = Field(description="Boolean flags for detected stress factors")
 
     # Detailed metrics
-    skewness: Optional[SkewnessMetrics] = Field(
+    skewness: SkewnessMetrics | None = Field(
         default=None, description="Detailed skewness analysis per column"
     )
-    cardinality: Optional[CardinalityMetrics] = Field(
+    cardinality: CardinalityMetrics | None = Field(
         default=None, description="Detailed cardinality analysis per column"
     )
-    zipfian: Optional[ZipfianMetrics] = Field(
+    zipfian: ZipfianMetrics | None = Field(
         default=None, description="Detailed Zipfian distribution analysis"
     )
-    correlation: Optional[CorrelationMetrics] = Field(
+    correlation: CorrelationMetrics | None = Field(
         default=None, description="Detailed correlation complexity analysis"
     )
 
     # Data quality indicators
-    null_percentage: Dict[str, float] = Field(
+    null_percentage: dict[str, float] = Field(
         default_factory=dict, description="Percentage of null values per column"
     )
-    column_types: Dict[str, str] = Field(
+    column_types: dict[str, str] = Field(
         default_factory=dict, description="Data type of each column (numeric, categorical, etc.)"
     )
 
     # Configuration used
-    thresholds_used: Dict[str, float] = Field(
+    thresholds_used: dict[str, float] = Field(
         default_factory=dict, description="Threshold values used for stress detection"
     )
 
@@ -182,30 +182,6 @@ class DatasetProfile(BaseModel):
     def from_json(cls, json_str: str) -> "DatasetProfile":
         """Deserialize profile from JSON string."""
         return cls.model_validate_json(json_str)
-
-
-class RecommendationConstraints(BaseModel):
-    """User constraints for model recommendation.
-    
-    Defines hardware, privacy, and performance requirements that filter
-    the available model pool before scoring.
-    """
-    
-    cpu_only: bool = Field(default=False, description="Require CPU-only models (no GPU dependency)")
-    strict_dp: bool = Field(default=False, description="Require differential privacy guarantees")
-    prefer_speed: bool = Field(default=False, description="Prioritize training speed over quality")
-    dataset_rows: Optional[int] = Field(default=None, description="Number of rows in dataset (for size filtering)")
-    
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "cpu_only": True,
-                "strict_dp": False,
-                "prefer_speed": False,
-                "dataset_rows": 10000
-            }
-        }
-    }
 
 
 # ============================================================================
@@ -291,7 +267,7 @@ class ColumnProfile(BaseModel):
 
     Contains metrics and difficulty scores only - no model recommendations.
     Model recommendations are handled by the Recommender component which
-    considers the full picture (constraints, hardware, privacy, etc.).
+    considers the full picture (dataset characteristics, model capabilities, etc.).
     """
 
     column_name: str = Field(description="Name of the column")
@@ -300,11 +276,11 @@ class ColumnProfile(BaseModel):
     # Statistical metrics
     unique_count: int = Field(ge=0, description="Number of unique values")
     null_percentage: float = Field(ge=0.0, le=100.0, description="Percentage of null values")
-    skewness: Optional[float] = Field(
+    skewness: float | None = Field(
         default=None,
         description="Fisher-Pearson skewness coefficient (None for categorical)"
     )
-    zipfian_ratio: Optional[float] = Field(
+    zipfian_ratio: float | None = Field(
         default=None,
         description="Top 20% concentration ratio (None for numeric)"
     )
@@ -322,7 +298,7 @@ class ColumnProfile(BaseModel):
     # NOTE: Model recommendations are NOT included here.
     # Recommendations are computed by the Recommender, which considers:
     # - Dataset-level stress factors
-    # - User constraints (hardware, privacy, latency)
+    # - Model capabilities and row-count limits
     # - All columns together (not just one)
 
 
@@ -339,7 +315,7 @@ class ColumnAnalysisResult(BaseModel):
     column_count: int = Field(ge=0, description="Total number of columns analyzed")
 
     # Per-column profiles
-    columns: Dict[str, ColumnProfile] = Field(
+    columns: dict[str, ColumnProfile] = Field(
         default_factory=dict,
         description="Column name -> ColumnProfile mapping"
     )
@@ -349,13 +325,13 @@ class ColumnAnalysisResult(BaseModel):
         ge=0, le=4,
         description="Maximum difficulty score across all columns"
     )
-    difficult_columns: List[str] = Field(
+    difficult_columns: list[str] = Field(
         default_factory=list,
         description="Columns with difficulty ≥3 (requiring specialized models)"
     )
 
     # Summary statistics
-    stress_factor_summary: Dict[str, int] = Field(
+    stress_factor_summary: dict[str, int] = Field(
         default_factory=dict,
         description="Count of columns affected by each stress factor"
     )

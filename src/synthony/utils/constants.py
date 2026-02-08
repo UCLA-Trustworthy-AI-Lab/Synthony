@@ -9,8 +9,6 @@ All threshold values are based on empirical research and documented in:
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict
-
 
 # Data directory configuration
 # Override with SYNTHONY_DATA_DIR environment variable
@@ -57,7 +55,7 @@ class AnalyzerConfig:
     """Sample if more than this many numeric columns (O(n²) complexity)."""
 
     @classmethod
-    def from_dict(cls, config: Dict[str, float]) -> "AnalyzerConfig":
+    def from_dict(cls, config: dict[str, float]) -> "AnalyzerConfig":
         """Create config from dictionary.
 
         Args:
@@ -68,7 +66,7 @@ class AnalyzerConfig:
         """
         return cls(**config)
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
         """Convert config to dictionary for JSON serialization."""
         return {
             "skewness_threshold": self.skewness_threshold,

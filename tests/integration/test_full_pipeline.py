@@ -5,10 +5,8 @@ Tests the complete workflow from file loading through analysis to JSON output.
 """
 
 import json
-from pathlib import Path
 
 import pandas as pd
-import pytest
 
 from synthony import StochasticDataAnalyzer
 from synthony.benchmark.generators import BenchmarkDatasetGenerator

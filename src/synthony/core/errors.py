@@ -1,7 +1,7 @@
 """
 Custom exceptions for synthony.
 
-Note: Do NOT redefine Python built-in exceptions (TypeError, ValueError, 
+Note: Do NOT redefine Python built-in exceptions (TypeError, ValueError,
 FileNotFoundError). Use them directly or create domain-specific subclasses.
 """
 

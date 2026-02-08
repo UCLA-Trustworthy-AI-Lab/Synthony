@@ -6,7 +6,6 @@ Tests high cardinality and Zipfian distribution detection.
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from synthony.detectors.cardinality import CardinalityDetector
 

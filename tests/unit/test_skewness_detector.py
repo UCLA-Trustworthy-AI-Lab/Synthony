@@ -6,7 +6,6 @@ Tests the Fisher-Pearson skewness calculation and severe skew detection.
 
 import numpy as np
 import pandas as pd
-import pytest
 from scipy.stats import lognorm
 
 from synthony.detectors.skewness import SkewnessDetector
@@ -131,7 +130,7 @@ class TestSkewnessDetector:
 
         # With high threshold, should not detect
         detector_high = SkewnessDetector(threshold=5.0)
-        result_high = detector_high.analyze(df)
+        _result_high = detector_high.analyze(df)
         # May or may not detect depending on actual skewness
         # Just verify threshold is used correctly
         assert detector_high.threshold == 5.0
