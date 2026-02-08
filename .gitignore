@@ -6,12 +6,17 @@ __pycache__/
 # C extensions
 *.so
 
-# Documentation
-*.md
-!README.md
-!CLAUDE.md
-docs/*.md
-docs/**/*
+# data
+data/*
+evaluation_metrics/*
+.claude/*
+*.pdf
+
+# Documentation builds
+docs/_build/
+
+# Secrets - never commit API keys
+baselines/api_key.json
 
 # frontend
 frontend/*
@@ -132,6 +137,9 @@ venv.bak/
 # sqlite database
 data/synthony.db
 
+# Dataset
+dataset/*
+
 # mkdocs documentation
 /site
 
@@ -162,14 +170,13 @@ Thumbs.db
 ._*
 
 # Project-specific
-benchmarks/
 *.csv
 *.parquet
 profile_*.json
 
-# Output
-output/
-
 
 # MCP config file
 .mcp.json
+
+# output
+output/*

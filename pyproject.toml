@@ -81,6 +81,7 @@ all = [
 [project.scripts]
 synthony-profile = "synthony.cli:profile_command"
 synthony-benchmark = "synthony.cli:benchmark_command"
+synthony-recommender = "synthony.cli:recommender_command"
 synthony-api = "synthony.api.server:main"
 synthony-mcp = "mcp_server.server:main"
 

@@ -26,8 +26,8 @@ def test_list_models():
 
 def test_get_model():
     """Test get specific model endpoint."""
-    print("Test 3: Get Model Info (TabTree)")
-    response = requests.get(f"{BASE_URL}/models/TabTree")
+    print("Test 3: Get Model Info (ARF)")
+    response = requests.get(f"{BASE_URL}/models/ARF")
     data = response.json()
     print(f"   Model: {data['model_name']}")
     print(f"   Type: {data['type']}")

@@ -300,6 +300,7 @@ async def recommend_model(request: RecommendationRequest = Body(...)):
         result = recommender.recommend(
             dataset_profile=dataset_profile,
             column_analysis=column_analysis,
+            constraints=request.constraints,
             method=request.method.value,
             top_n=request.top_n,
         )
@@ -321,6 +322,8 @@ async def analyze_and_recommend(
         RecommendationMethod.hybrid, description="Recommendation method"
     ),
     top_n: int = Query(3, ge=1, le=10, description="Top N alternatives"),
+    cpu_only: bool = Query(False, description="Only recommend CPU-compatible models"),
+    strict_dp: bool = Query(False, description="Only recommend models with strong differential privacy"),
 ):
     """
     One-shot endpoint: Upload CSV/Parquet OR use existing dataset → Analyze → Recommend models.
@@ -393,12 +396,19 @@ async def analyze_and_recommend(
             )
 
         # Step 2: Recommend models
+        constraints = {}
+        if cpu_only:
+            constraints["cpu_only"] = True
+        if strict_dp:
+            constraints["strict_dp"] = True
+
         recommendation_request = RecommendationRequest(
             dataset_id=analysis_response.dataset_id,
             dataset_profile=analysis_response.dataset_profile,
             column_analysis=analysis_response.column_analysis,
             method=method,
             top_n=top_n,
+            constraints=constraints if constraints else None,
         )
 
         recommendation_result = await recommend_model(request=recommendation_request)
@@ -429,12 +439,16 @@ async def analyze_and_recommend(
 @router.get("/models", response_model=dict[str, Any])
 async def list_models(
     model_type: str | None = Query(None, description="Filter by type (GAN, VAE, Diffusion, Tree-based, Statistical)"),
+    cpu_only: bool = Query(False, description="Only show CPU-compatible models"),
+    requires_dp: bool = Query(False, description="Only show models with differential privacy support"),
 ):
     """
     List available synthesis models from registry.
 
     **Filters**:
     - `model_type`: Filter by model type (GAN, VAE, Diffusion, Tree-based, Statistical)
+    - `cpu_only`: Only show CPU-compatible models
+    - `requires_dp`: Only show models with differential privacy support
 
     **Returns**: List of models with capabilities, constraints, and descriptions
     """
@@ -448,6 +462,14 @@ async def list_models(
     for name, info in models.items():
         # Type filter
         if model_type and info.get("type", "").lower() != model_type.lower():
+            continue
+
+        # CPU-only filter
+        if cpu_only and not info.get("constraints", {}).get("cpu_only_compatible", False):
+            continue
+
+        # DP filter
+        if requires_dp and info.get("capabilities", {}).get("privacy_dp", 0) < 3:
             continue
 
         filtered_models[name] = info

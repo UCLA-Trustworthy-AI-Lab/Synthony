@@ -46,8 +46,6 @@ def get_recommended_models(analysis: Dict) -> List[str]:
                 # Extract model names from recommendation strings
                 if "GReaT" in rec:
                     recommendations.add("GReaT")
-                if "TabTree" in rec:
-                    recommendations.add("TabTree")
                 if "TabDDPM" in rec:
                     recommendations.add("TabDDPM")
                 if "TabSyn" in rec:

@@ -1,47 +1,64 @@
 #!/usr/bin/env python3
-"""Simple test script to verify OpenAI API connection using .env credentials."""
+"""
+Functional test for OpenAI API connection.
+
+This test is skipped if OPENAI_API_KEY is not configured.
+"""
 
 import os
-
+import pytest
 from dotenv import load_dotenv
-from openai import OpenAI
+
 
 # Load environment variables from .env
 load_dotenv()
 
-# Get OpenAI configuration from environment
-api_key = os.getenv("OPENAI_API_KEY")
-base_url = os.getenv("OPENAI_URL", "https://api.openai.com/v1")
-model = os.getenv("OPENAI_MODEL", "gpt-4o")
 
-if not api_key:
-    print("Error: OPENAI_API_KEY not found in .env file")
-    print("Please add: OPENAI_API_KEY=sk-your-key-here")
-    exit(1)
+@pytest.fixture
+def openai_client():
+    """Create OpenAI client if API key is available."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    base_url = os.getenv("OPENAI_URL", "https://api.openai.com/v1")
+    
+    if not api_key:
+        pytest.skip("OPENAI_API_KEY not configured in .env")
+    
+    from openai import OpenAI
+    return OpenAI(api_key=api_key, base_url=base_url)
 
-print(f"Connecting to: {base_url}")
-print(f"Using model: {model}")
-print("-" * 50)
 
-# Create OpenAI client
-client = OpenAI(
-    api_key=api_key,
-    base_url=base_url
-)
+class TestOpenAIConnection:
+    """Tests for OpenAI API connectivity."""
 
-# Send a simple test message
-try:
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "user", "content": "Say hello in one sentence."}
-        ],
-        max_tokens=50
-    )
+    def test_openai_connection(self, openai_client):
+        """Test basic OpenAI API connection with a simple prompt."""
+        model = os.getenv("OPENAI_MODEL", "gpt-4o")
+        
+        response = openai_client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "user", "content": "Say hello in one word."}
+            ],
+            max_tokens=10
+        )
+        
+        assert response.choices[0].message.content is not None
+        assert len(response.choices[0].message.content) > 0
 
-    print("Connection successful!")
-    print(f"Response: {response.choices[0].message.content}")
-
-except Exception as e:
-    print(f"Connection failed: {e}")
-    exit(1)
+    def test_openai_json_response(self, openai_client):
+        """Test OpenAI API with JSON response format."""
+        model = os.getenv("OPENAI_MODEL", "gpt-4o")
+        
+        response = openai_client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "user", "content": "Return a JSON object with key 'status' set to 'ok'."}
+            ],
+            max_tokens=50,
+            response_format={"type": "json_object"}
+        )
+        
+        import json
+        content = response.choices[0].message.content
+        data = json.loads(content)
+        assert "status" in data

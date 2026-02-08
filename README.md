@@ -35,7 +35,7 @@ Synthony solves this by:
 
 ### Model Recommendation
 
-- **13+ SOTA Models** — TabDDPM, TabSyn, AutoDiff, GReaT, TabTree, TVAE, CTGAN, PATE-CTGAN, DPCART, AIM, GaussianCopula, ARF
+- **13+ SOTA Models** — TabDDPM, TabSyn, AutoDiff, GReaT, TVAE, CTGAN, PATE-CTGAN, DPCART, AIM, GaussianCopula, ARF
 - **Constraint Support** — CPU-only, differential privacy requirements
 - **Hybrid Engine** — Rule-based scoring + LLM reasoning
 - **Explainable Results** — Clear reasoning for every recommendation
@@ -45,6 +45,7 @@ Synthony solves this by:
 - **REST API** — FastAPI server with OpenAPI documentation
 - **Python SDK** — Direct library usage
 - **CLI Tools** — Command-line profiling and benchmarking
+- **MCP Server** — Integration with AI agents (Claude, Cline, Continue.dev, Cursor)
 
 ## Installation
 
@@ -128,6 +129,52 @@ synthony-profile data.csv --output profile.json
 # Generate benchmark datasets
 synthony-benchmark --output-dir ./benchmarks
 ```
+
+### MCP Server for AI Agents
+
+Synthony includes an **MCP (Model Context Protocol) server** that integrates with AI agents like Claude Code, Cline, Continue.dev, and Cursor.
+
+**Quick Install:**
+
+```bash
+# Install with MCP support
+pip install -e ".[mcp]"
+
+# Test the server
+python -m mcp_server.server --test
+```
+
+**Connect to Claude Desktop (macOS):**
+
+```bash
+mkdir -p ~/Library/Application\ Support/Claude
+cat > ~/Library/Application\ Support/Claude/claude_desktop_config.json << 'EOF'
+{
+  "mcpServers": {
+    "synthony": {
+      "command": "synthony-mcp",
+      "env": {
+        "SYNTHONY_DATA_DIR": "$(pwd)/dataset/input_data"
+      }
+    }
+  }
+}
+EOF
+```
+
+Then restart Claude Desktop. You can now ask Claude to analyze datasets and get recommendations:
+
+```
+"Analyze the Bean dataset and recommend the best synthetic data model"
+```
+
+**Connect to Other Agents:**
+
+- **Cline (VS Code)**: `.cline/config.json`
+- **Continue.dev (VS Code)**: `.continue/config.json`
+- **Cursor (AI Editor)**: Settings → MCP Servers
+
+For detailed setup instructions across all platforms, including Windows, Linux, npm installation, Docker, and troubleshooting: **See [MCP_SETUP.md](docs/MCP_SETUP.md)**
 
 ## How It Works
 
@@ -286,7 +333,7 @@ mypy src/
 - [x] LLM-based recommendation engine
 - [x] React + TypeScript frontend
 - [x] Docker deployment
-- [ ] MCP server implementation
+- [x] MCP server implementation for AI agent integration
 - [ ] PyPI package publication
 
 ## Contributing
@@ -314,5 +361,4 @@ MIT License with prior authorization requirement — see [LICENSE.md](LICENSE.md
 ## Acknowledgments
 
 Developed by **Hochan Son** at **UCLA Trustworthy AI Lab** under the supervision of Prof. Guang Cheng.
-Xiaofeng for the table-synthesizer implementation and model architecture design.
-Jason Ni for testing and evaluation.
+Xiaofeng for the table-synthesizer implementation and model architecture design. Jason Ni for testing and evaluation.

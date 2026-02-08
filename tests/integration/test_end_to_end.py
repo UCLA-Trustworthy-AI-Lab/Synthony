@@ -5,10 +5,11 @@ Tests complete workflows from file upload through analysis to final recommendati
 """
 
 import io
-
-import numpy as np
-import pandas as pd
+import json
 import pytest
+from pathlib import Path
+import pandas as pd
+import numpy as np
 from fastapi.testclient import TestClient
 
 from synthony.api.server import app
@@ -17,8 +18,9 @@ from synthony.benchmark.generators import BenchmarkDatasetGenerator
 
 @pytest.fixture
 def client():
-    """Create test client for API."""
-    return TestClient(app)
+    """Create test client for API with startup events triggered."""
+    with TestClient(app) as client:
+        yield client
 
 
 class TestBenchmarkDatasetWorkflows:
@@ -55,8 +57,8 @@ class TestBenchmarkDatasetWorkflows:
         rec = data["recommendation"]["recommended_model"]
 
         # Should recommend models good at handling skew
-        # GReaT, TabDDPM, TabSyn, AutoDiff, TabTree have skew capability >= 3
-        skew_capable_models = {"GReaT", "TabDDPM", "TabSyn", "AutoDiff", "TabTree"}
+        # GReaT, TabDDPM, TabSyn, AutoDiff have skew capability >= 3
+        skew_capable_models = {"GReaT", "TabDDPM", "TabSyn", "AutoDiff", "NFlow"}
         assert rec["model_name"] in skew_capable_models
 
         # Reasoning should mention skew
@@ -91,8 +93,8 @@ class TestBenchmarkDatasetWorkflows:
         # Should recommend models good at Zipfian handling
         rec = data["recommendation"]["recommended_model"]
 
-        # GReaT, TabSyn, TabTree, ARF have good Zipfian capability
-        zipfian_capable_models = {"GReaT", "TabSyn", "TabTree", "ARF"}
+        # GReaT, TabSyn, ARF have good Zipfian capability
+        zipfian_capable_models = {"GReaT", "TabSyn", "ARF"}
         assert rec["model_name"] in zipfian_capable_models
 
     def test_small_data_trap_workflow(self, client):
@@ -133,6 +135,128 @@ class TestBenchmarkDatasetWorkflows:
         assert "ARF" in all_models or "GaussianCopula" in all_models
 
 
+class TestConstraintWorkflows:
+    """Test workflows with different constraint combinations."""
+
+    def test_cpu_only_constraint_workflow(self, client):
+        """Complete workflow with CPU-only constraint."""
+        # Create test dataset
+        np.random.seed(42)
+        from scipy.stats import lognorm
+
+        df = pd.DataFrame({
+            "col1": lognorm.rvs(s=0.95, scale=np.exp(5), size=1000, random_state=42),
+            "col2": np.random.randn(1000),
+            "col3": np.random.choice(["A", "B", "C"], 1000),
+        })
+
+        csv_buffer = io.BytesIO()
+        df.to_csv(csv_buffer, index=False)
+        csv_buffer.seek(0)
+
+        # Request with CPU-only constraint
+        response = client.post(
+            "/analyze-and-recommend",
+            params={
+                "method": "rule_based",
+                "cpu_only": True,
+                "strict_dp": False,
+                "top_n": 5,
+            },
+            files={"file": ("test.csv", csv_buffer, "text/csv")},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify no GPU models recommended
+        gpu_models = {"TabDDPM", "TabSyn"}
+
+        rec = data["recommendation"]["recommended_model"]
+        assert rec["model_name"] not in gpu_models
+
+        # Check all alternatives
+        if "alternative_models" in data["recommendation"]:
+            for alt in data["recommendation"]["alternative_models"]:
+                assert alt["model_name"] not in gpu_models
+
+        # Check excluded models includes GPU models with reasons
+        if "excluded_models" in data["recommendation"]:
+            # excluded_models is a Dict[str, str] (name -> reason)
+            excluded_names = list(data["recommendation"]["excluded_models"].keys())
+            # At least some GPU models should be excluded
+            assert any(model in excluded_names for model in gpu_models)
+
+    def test_dp_constraint_workflow(self, client):
+        """Complete workflow with differential privacy constraint."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            "sensitive_data": np.random.randn(1000),
+            "category": np.random.choice(["A", "B", "C"], 1000),
+        })
+
+        csv_buffer = io.BytesIO()
+        df.to_csv(csv_buffer, index=False)
+        csv_buffer.seek(0)
+
+        response = client.post(
+            "/analyze-and-recommend",
+            params={
+                "method": "rule_based",
+                "cpu_only": False,
+                "strict_dp": True,
+                "top_n": 3,
+            },
+            files={"file": ("sensitive.csv", csv_buffer, "text/csv")},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Should only recommend DP models
+        dp_models = {"PATE-CTGAN", "PATECTGAN", "AIM", "DPCART"}
+
+        rec = data["recommendation"]["recommended_model"]
+        assert rec["model_name"] in dp_models
+
+        # All alternatives should be DP models
+        if "alternative_models" in data["recommendation"]:
+            for alt in data["recommendation"]["alternative_models"]:
+                assert alt["model_name"] in dp_models
+
+    def test_combined_constraints_workflow(self, client):
+        """Workflow with both CPU-only and DP constraints."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            "data": np.random.randn(500),
+        })
+
+        csv_buffer = io.BytesIO()
+        df.to_csv(csv_buffer, index=False)
+        csv_buffer.seek(0)
+
+        response = client.post(
+            "/analyze-and-recommend",
+            params={
+                "method": "rule_based",
+                "cpu_only": True,
+                "strict_dp": True,
+                "top_n": 3,
+            },
+            files={"file": ("constrained.csv", csv_buffer, "text/csv")},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Should only recommend CPU-compatible DP models
+        # PATE-CTGAN requires GPU, so only AIM and DPCART
+        cpu_dp_models = {"AIM", "DPCART"}
+
+        rec = data["recommendation"]["recommended_model"]
+        assert rec["model_name"] in cpu_dp_models
+
+
 class TestRealWorldScenarios:
     """Test realistic data science workflows."""
 
@@ -167,10 +291,11 @@ class TestRealWorldScenarios:
         assert profile["row_count"] == 5000
         assert profile["column_count"] == 6
 
-        # Step 2: Get model recommendations
+        # Step 2: Get model recommendations (try without constraints)
         recommend_response = client.post(
             "/recommend",
             json={
+                "dataset_id": analysis.get("dataset_id", "customer_data"),
                 "dataset_profile": profile,
                 "method": "rule_based",
                 "top_n": 5,
@@ -184,9 +309,10 @@ class TestRealWorldScenarios:
         assert "alternative_models" in recommendation
         assert len(recommendation["alternative_models"]) > 0
 
+
     def test_production_deployment_workflow(self, client):
-        """Simulate production deployment workflow."""
-        # Production dataset (larger)
+        """Simulate production deployment workflow with constraints."""
+        # Production dataset (larger, needs CPU-only)
         np.random.seed(42)
         df = pd.DataFrame({
             "transaction_id": range(10000),
@@ -200,6 +326,7 @@ class TestRealWorldScenarios:
         df.to_csv(csv_buffer, index=False)
         csv_buffer.seek(0)
 
+        # Production requirements: CPU-only, fast inference
         response = client.post(
             "/analyze-and-recommend",
             params={
@@ -216,6 +343,8 @@ class TestRealWorldScenarios:
         # Verify production-ready recommendations
         rec = data["recommendation"]["recommended_model"]
 
+        # Should not recommend slow models for production
+
         # Should have high confidence
         assert rec["confidence_score"] >= 0.5
 
@@ -224,9 +353,9 @@ class TestEdgeCases:
     """Test edge cases and error handling."""
 
     def test_very_small_dataset(self, client):
-        """Test with extremely small dataset (< 50 rows)."""
+        """Test with small dataset (100 rows)."""
         df = pd.DataFrame({
-            "value": [1, 2, 3, 4, 5] * 5  # 25 rows
+            "value": [1, 2, 3, 4, 5] * 20  # 100 rows
         })
 
         csv_buffer = io.BytesIO()

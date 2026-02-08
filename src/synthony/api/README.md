@@ -337,7 +337,7 @@ print(f"Recommended: {result['recommendation']['recommended_model']['model_name'
 
 - **Diffusion**: TabDDPM, TabSyn, AutoDiff
 - **LLM-based**: GReaT
-- **Tree-based**: TabTree, ARF
+- **Tree-based**: ARF, CART
 - **GAN**: CTGAN
 - **VAE**: TVAE
 - **Statistical**: GaussianCopula
@@ -347,7 +347,7 @@ print(f"Recommended: {result['recommendation']['recommended_model']['model_name'
 
 - **High Cardinality**: CTGAN, TabDDPM, TabSyn
 - **Severe Skew**: GReaT, AutoDiff, TabDDPM
-- **Small Data**: GaussianCopula, TabTree, ARF
+- **Small Data**: GaussianCopula, ARF
 - **Privacy-Preserving**: PATE-CTGAN, AIM, DPCART
 
 ---

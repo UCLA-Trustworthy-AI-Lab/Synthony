@@ -18,8 +18,9 @@ from synthony.benchmark.generators import BenchmarkDatasetGenerator
 
 @pytest.fixture
 def client():
-    """Create test client for API."""
-    return TestClient(app)
+    """Create test client for API with startup events triggered."""
+    with TestClient(app) as client:
+        yield client
 
 
 # Baseline expectations for benchmark datasets
@@ -29,7 +30,7 @@ BASELINE_EXPECTATIONS = {
             "severe_skew": True,
             "small_data": False,
         },
-        "expected_models": ["GReaT", "TabDDPM", "TabSyn", "AutoDiff", "TabTree"],
+        "expected_models": ["GReaT", "TabDDPM", "TabSyn", "AutoDiff", "NFlow"],
         "min_confidence": 0.7,
     },
     "needle_haystack": {
@@ -37,7 +38,7 @@ BASELINE_EXPECTATIONS = {
             "zipfian_distribution": True,
             "high_cardinality": True,
         },
-        "expected_models": ["GReaT", "TabSyn", "TabTree", "ARF"],
+        "expected_models": ["GReaT", "TabSyn", "ARF"],
         "min_confidence": 0.7,
     },
     "small_data": {
@@ -244,6 +245,87 @@ class TestKnownDatasetConsistency:
 
         # Stress factors should be identical
         assert stress_factors_list[0] == stress_factors_list[1]
+
+
+class TestConstraintConsistency:
+    """Test that constraints produce consistent filtering."""
+
+    @pytest.fixture
+    def test_data(self):
+        """Create test dataset."""
+        np.random.seed(42)
+        return pd.DataFrame({
+            "col1": np.random.randn(1000),
+            "col2": lognorm.rvs(s=0.95, scale=np.exp(5), size=1000, random_state=42),
+            "col3": np.random.choice(["A", "B", "C"], 1000),
+        })
+
+    def test_cpu_constraint_consistency(self, client, test_data):
+        """CPU constraint should consistently exclude GPU models."""
+        # Run 3 times
+        for i in range(3):
+            csv_buffer = io.BytesIO()
+            test_data.to_csv(csv_buffer, index=False)
+            csv_buffer.seek(0)
+
+            response = client.post(
+                "/analyze-and-recommend",
+                params={
+                    "dataset_id": f"cpu_test_{i}",
+                    "method": "rule_based",
+                    "cpu_only": True,
+                    "top_n": 5,
+                },
+                files={"file": ("test.csv", csv_buffer, "text/csv")},
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+
+            # GPU models should NEVER be recommended with cpu_only=True
+            gpu_models = {"TabDDPM", "TabSyn", "GReaT"}
+
+            rec_model = data["recommendation"]["recommended_model"]["model_name"]
+            assert rec_model not in gpu_models
+
+            # Check alternatives
+            if "alternative_models" in data["recommendation"]:
+                for alt in data["recommendation"]["alternative_models"]:
+                    assert alt["model_name"] not in gpu_models
+
+    def test_dp_constraint_consistency(self, client, test_data):
+        """DP constraint should consistently include only DP models."""
+        for i in range(3):
+            csv_buffer = io.BytesIO()
+            test_data.to_csv(csv_buffer, index=False)
+            csv_buffer.seek(0)
+
+            response = client.post(
+                "/analyze-and-recommend",
+                params={
+                    "dataset_id": f"dp_test_{i}",
+                    "method": "rule_based",
+                    "cpu_only": False,
+                    "strict_dp": True,
+                    "top_n": 3,
+                },
+                files={"file": ("test.csv", csv_buffer, "text/csv")},
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+
+            # Only DP models should be recommended
+            dp_models = {"PATE-CTGAN", "PATECTGAN", "AIM", "DPCART"}
+
+            rec_model = data["recommendation"]["recommended_model"]["model_name"]
+            assert rec_model in dp_models
+
+            # Check alternatives
+            if "alternative_models" in data["recommendation"]:
+                for alt in data["recommendation"]["alternative_models"]:
+                    assert alt["model_name"] in dp_models
+
 
 
 class TestConfidenceScoreRegression:

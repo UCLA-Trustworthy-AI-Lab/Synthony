@@ -78,7 +78,7 @@ for model_type in types_to_test:
 print("\nScenario 3: Model performance characteristics")
 print("-" * 80)
 
-performance_models = ["GReaT", "TabDDPM", "TabTree", "GaussianCopula"]
+performance_models = ["GReaT", "TabDDPM", "ARF", "GaussianCopula"]
 print(f"\n{'Model':<20} {'Training':<15} {'Inference':<15} {'Memory':<15}")
 print("-" * 70)
 

@@ -40,6 +40,7 @@ from mcp_server.tools.data_tools import DataTools
 from mcp_server.tools.profiling_tools import ProfilingTools
 from mcp_server.tools.model_tools import ModelTools
 from mcp_server.tools.recommendation_tools import RecommendationTools
+from mcp_server.tools.benchmark_tools import BenchmarkTools
 from mcp_server.resources.model_registry import ModelRegistry
 from mcp_server.resources.profile_cache import ProfileCache
 from mcp_server.resources.benchmark_data import BenchmarkData
@@ -82,6 +83,7 @@ class SynthonyMCPServer:
         self.profiling_tools = ProfilingTools(self.analyzer, self.column_analyzer)
         self.model_tools = ModelTools(self.recommender)
         self.recommendation_tools = RecommendationTools(self.recommender)
+        self.benchmark_tools = BenchmarkTools()
         self.model_registry = ModelRegistry(self.recommender)
         self.profile_cache = ProfileCache()
         self.benchmark_data = BenchmarkData()
@@ -115,6 +117,9 @@ class SynthonyMCPServer:
             # Recommendation tools
             tools.extend(self.recommendation_tools.get_tool_definitions())
 
+            # Benchmark tools
+            tools.extend(self.benchmark_tools.get_tool_definitions())
+
             logger.info(f"Listed {len(tools)} tools")
             return tools
 
@@ -141,6 +146,8 @@ class SynthonyMCPServer:
                     result = await self.model_tools.execute_tool(name, arguments)
                 elif name in self.recommendation_tools.get_tool_names():
                     result = await self.recommendation_tools.execute_tool(name, arguments)
+                elif name in self.benchmark_tools.get_tool_names():
+                    result = await self.benchmark_tools.execute_tool(name, arguments)
                 else:
                     raise ValueError(f"Unknown tool: {name}")
 

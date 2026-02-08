@@ -6,6 +6,7 @@ Tests higher-order correlation detection (dense correlation matrix with low R²)
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from synthony.detectors.correlation import CorrelationDetector
 
@@ -51,31 +52,29 @@ class TestCorrelationDetector:
         assert result.has_higher_order is False
 
     def test_higher_order_correlation(self):
-        """Non-linear relationships should trigger higher-order detection."""
+        """Dense correlation with low linear R² should trigger higher-order detection."""
         np.random.seed(42)
-        x = np.random.randn(1000)
+        n = 1000
+        # 5 columns sharing a weak common factor: corr(xi,xj) ≈ 1/(1+σ²) ≈ 0.31
+        # All 10 pairs have moderate Pearson r (~0.3) but low R² (~0.09)
+        z = np.random.randn(n)
+        noise_scale = 1.5
         df = pd.DataFrame({
-            "x1": x,
-            "x2": x ** 2,  # Quadratic relationship
-            "x3": np.sin(x * 3),  # Sinusoidal relationship
-            "x4": np.exp(x / 5),  # Exponential relationship
-            "x5": np.log(np.abs(x) + 1),  # Log relationship (adds more dense pairs)
+            "x1": z + noise_scale * np.random.randn(n),
+            "x2": z + noise_scale * np.random.randn(n),
+            "x3": z + noise_scale * np.random.randn(n),
+            "x4": z + noise_scale * np.random.randn(n),
+            "x5": z + noise_scale * np.random.randn(n),
         })
 
-        detector = CorrelationDetector(
-            correlation_threshold=0.1,
-            density_threshold=0.3,  # Lower threshold for reliable detection
-            r_squared_threshold=0.5  # Higher threshold (accepts r² < 0.5)
-        )
+        detector = CorrelationDetector()  # defaults: corr=0.1, density=0.5, r²=0.3
         result = detector.analyze(df)
 
-        # Should have dense correlation matrix (>=30% pairs correlated)
-        assert result.correlation_density >= 0.3
-
-        # R² should be below the threshold (0.5) for this to flag
-        assert result.mean_r_squared < 0.5
-
-        # Should flag as higher-order (density > 0.3, r² < 0.5)
+        # All 10 pairs have |r| ≈ 0.3 > 0.1 → density should be high
+        assert result.correlation_density > 0.5
+        # R² ≈ r² ≈ 0.09, well below 0.3 threshold
+        assert result.mean_r_squared < 0.3
+        # Should flag as higher-order (dense correlation but poor linear fit)
         assert result.has_higher_order is True
 
     def test_single_column(self):

@@ -59,7 +59,7 @@ Each `{dataset}_analysis.json` contains:
           "cardinality_difficulty": 1
         },
         "recommended_model_types": [
-          "Skew handling: TabDDPM, TabSyn, AutoDiff, GReaT, TabTree (score 3-4)"
+          "Skew handling: TabDDPM, TabSyn, AutoDiff, GReaT (score 3-4)"
         ]
       }
     }
@@ -204,8 +204,8 @@ for col_name, col_profile in analysis['column_analysis']['columns'].items():
 |-------|---------|-----------------|
 | 0-1 | Trivial | Any model (TVAE, GaussianCopula, etc.) |
 | 2 | Moderate | Most models (TVAE, CTGAN, ARF) |
-| 3 | Hard | Specialized models (TabDDPM, TabSyn, GReaT, TabTree) |
-| 4 | Very Hard | Advanced only (GReaT, TabTree, TabDDPM) |
+| 3 | Hard | Specialized models (TabDDPM, TabSyn, GReaT) |
+| 4 | Very Hard | Advanced only (GReaT, TabSyn, TabDDPM) |
 
 #### Stress Factors
 

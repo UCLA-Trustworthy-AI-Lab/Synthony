@@ -30,7 +30,13 @@ jobs:
       
       - name: Run unit tests
         run: pytest tests/unit/ -v --tb=short
-      
+
+      - name: Run integration tests
+        run: pytest tests/integration/ -v --tb=short
+
+      - name: Run functional tests
+        run: pytest tests/functional/ -v --tb=short
+
       - name: Run MCP server tests
         run: |
           cd mcp_server
