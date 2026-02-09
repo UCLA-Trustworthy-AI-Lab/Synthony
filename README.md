@@ -325,32 +325,8 @@ pytest --cov=synthony --cov-report=term-missing
 pytest tests/unit/test_skewness_detector.py -v
 ```
 
-### Code Quality
-
-```bash
-# Format
-black src/ tests/
-
-# Lint
-ruff src/ tests/
-
-# Type check
-mypy src/
-```
-
 ## Roadmap
 
-- [x] Core stress detection algorithms
-- [x] Pydantic schemas and JSON serialization
-- [x] CSV/Parquet file loading
-- [x] Benchmark dataset generators
-- [x] CLI tools
-- [x] FastAPI REST server
-- [x] Rule-based recommendation engine
-- [x] LLM-based recommendation engine
-- [x] React + TypeScript frontend
-- [x] Docker deployment
-- [x] MCP server implementation for AI agent integration
 - [ ] PyPI package publication
 
 ## Contributing
@@ -362,6 +338,13 @@ Contributions welcome! Please see `CLAUDE.md` for architecture details and codin
 MIT License with prior authorization requirement — see [LICENSE.md](LICENSE.md) for details.
 
 **Note**: Prior written authorization from the author or UCLA Trustworthy AI Lab is required before public distribution or commercial use.
+
+## Maintainer
+
+Hochan Son (ohsono@gmail.com)
+Xiaofeng Lin (Bernardo1998@g.ucla.edu)
+Jason Ni (jasonni@ucla.edu)
+Guang Cheng (cheng@ucla.edu)
 
 ## Citation
 
@@ -378,4 +361,4 @@ MIT License with prior authorization requirement — see [LICENSE.md](LICENSE.md
 ## Acknowledgments
 
 Developed by **Hochan Son** at **UCLA Trustworthy AI Lab** under the supervision of Prof. Guang Cheng.
-Xiaofeng for the table-synthesizer implementation and model architecture design. Jason Ni for testing and evaluation.
+Xiaofeng Lin for the table-synthesizer implementation and model architecture design. Jason Ni for testing and evaluation.
