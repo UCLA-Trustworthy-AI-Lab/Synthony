@@ -8,6 +8,7 @@ Implements both:
 
 import json
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -270,13 +271,13 @@ class ModelRecommendationEngine:
                 self.system_prompt = f.read()
                 self.system_prompt_loaded = True
                 # Print confirmation
-                print(f"✓ SystemPrompt loaded from: {system_prompt_path}")
-                print(f"  Size: {len(self.system_prompt)} characters")
+                print(f"✓ SystemPrompt loaded from: {system_prompt_path}", file=sys.stderr)
+                print(f"  Size: {len(self.system_prompt)} characters", file=sys.stderr)
         else:
             self.system_prompt = None
             self.system_prompt_loaded = False
-            print(f"⚠ SystemPrompt not found at: {system_prompt_path}")
-            print(f"  LLM mode will use default prompt")
+            print(f"⚠ SystemPrompt not found at: {system_prompt_path}", file=sys.stderr)
+            print(f"  LLM mode will use default prompt", file=sys.stderr)
 
         # OpenAI configuration
         self.openai_api_key = openai_api_key
@@ -296,15 +297,10 @@ class ModelRecommendationEngine:
 
                 self.openai_client = OpenAI(**client_kwargs)
 
-                # Validate the API key with a lightweight call
-                try:
-                    self.openai_client.models.list()
-                    self.llm_available = True
-                except Exception as e:
-                    print(f"⚠ OpenAI API key validation failed: {e}")
-                    self.openai_client = None
-                    self.llm_available = False
-                    self._try_vllm_fallback()
+                # Defer API key validation — do not block server startup.
+                # The key will be validated on the first actual LLM call.
+                self.llm_available = True
+                print(f"✓ OpenAI client created (validation deferred)", file=sys.stderr)
             else:
                 self.openai_client = None
                 self.llm_available = False
@@ -319,7 +315,7 @@ class ModelRecommendationEngine:
         if not vllm_url or self.openai_base_url == vllm_url:
             return  # No vLLM configured or already tried vLLM
 
-        print(f"↻ Attempting vLLM fallback at {vllm_url}")
+        print(f"↻ Attempting vLLM fallback at {vllm_url}", file=sys.stderr)
         try:
             from openai import OpenAI
 
@@ -327,16 +323,17 @@ class ModelRecommendationEngine:
             vllm_model = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-32B-Instruct")
 
             client = OpenAI(api_key=vllm_key, base_url=vllm_url)
-            client.models.list()
+            # Defer validation — do not block server startup
+            # client.models.list()
 
             self.openai_client = client
             self.openai_api_key = vllm_key
             self.openai_base_url = vllm_url
             self.openai_model = vllm_model
             self.llm_available = True
-            print(f"✓ vLLM fallback succeeded (model: {vllm_model})")
+            print(f"✓ vLLM fallback succeeded (model: {vllm_model})", file=sys.stderr)
         except Exception as e:
-            print(f"⚠ vLLM fallback also failed: {e}")
+            print(f"⚠ vLLM fallback also failed: {e}", file=sys.stderr)
 
     @property
     def model_capabilities(self) -> Dict[str, Any]:
@@ -810,7 +807,7 @@ class ModelRecommendationEngine:
         # Prepare system message
         if self.system_prompt and self.system_prompt_loaded:
             system_message = self.system_prompt
-            print(f"🤖 Using SystemPrompt from: {self.system_prompt_path.name}")
+            print(f"🤖 Using SystemPrompt from: {self.system_prompt_path.name}", file=sys.stderr)
         else:
             model_count = len(self.models)
             model_names = ", ".join(sorted(self.models.keys()))
@@ -827,7 +824,7 @@ Consider:
 - User constraints (cpu_only, differential privacy with dp score >= {self.config.dp_min_score})
 
 Return recommendations in JSON format with clear reasoning."""
-            print(f"⚠ Using default prompt (SystemPrompt not loaded)")
+            print(f"⚠ Using default prompt (SystemPrompt not loaded)", file=sys.stderr)
 
         # Call OpenAI API
         try:
@@ -842,7 +839,7 @@ Return recommendations in JSON format with clear reasoning."""
             )
 
             llm_response = json.loads(response.choices[0].message.content)
-            print(f"✓ LLM response received (model: {self.openai_model})")
+            print(f"✓ LLM response received (model: {self.openai_model})", file=sys.stderr)
 
         except Exception as e:
             raise RuntimeError(f"OpenAI API call failed: {e}")
@@ -884,10 +881,10 @@ Return recommendations in JSON format with clear reasoning."""
         # Prepare system message
         if self.system_prompt and self.system_prompt_loaded:
             system_message = self.system_prompt
-            print(f"🤖 Hybrid mode: Using SystemPrompt from {self.system_prompt_path.name}")
+            print(f"🤖 Hybrid mode: Using SystemPrompt from {self.system_prompt_path.name}", file=sys.stderr)
         else:
             system_message = "You are an expert in synthetic data generation models."
-            print(f"⚠ Hybrid mode: Using default prompt")
+            print(f"⚠ Hybrid mode: Using default prompt", file=sys.stderr)
 
         try:
             response = self.openai_client.chat.completions.create(
@@ -901,7 +898,7 @@ Return recommendations in JSON format with clear reasoning."""
             )
 
             llm_response = json.loads(response.choices[0].message.content)
-            print(f"✓ LLM reasoning added to hybrid recommendation")
+            print(f"✓ LLM reasoning added to hybrid recommendation", file=sys.stderr)
 
             # Use LLM's ranking but keep rule-based structure
             primary_name = llm_response.get("recommended_model")
