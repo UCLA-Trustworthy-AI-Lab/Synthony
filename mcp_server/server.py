@@ -16,6 +16,11 @@ import logging
 import os
 import sys
 from pathlib import Path
+
+# Add project root and src to path to allow running directly
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "src"))
 from typing import Any, Dict, List, Optional
 
 from mcp.server import Server
@@ -26,6 +31,9 @@ from mcp.types import (
     ImageContent,
     EmbeddedResource,
     LoggingLevel,
+    Resource,
+    Prompt,
+    PromptArgument,
 )
 
 # Import Synthony core components
@@ -47,10 +55,11 @@ from mcp_server.resources.profile_cache import ProfileCache
 from mcp_server.resources.benchmark_data import BenchmarkData
 from mcp_server.prompts.workflows import WorkflowPrompts
 
-# Configure logging
+# Configure logging — MUST go to stderr to avoid corrupting MCP stdio protocol
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    stream=sys.stderr,
 )
 logger = logging.getLogger("synthony-mcp")
 
@@ -209,18 +218,29 @@ class SynthonyMCPServer:
 
         # Resources handlers
         @self.server.list_resources()
-        async def list_resources() -> List[Dict[str, str]]:
+        async def list_resources() -> List[Resource]:
             """List all available resources."""
-            resources = []
+            raw_resources = []
 
             # Model registry resources
-            resources.extend(self.model_registry.get_resource_definitions())
+            raw_resources.extend(self.model_registry.get_resource_definitions())
 
             # Profile cache resources
-            resources.extend(self.profile_cache.get_resource_definitions())
+            raw_resources.extend(self.profile_cache.get_resource_definitions())
 
             # Benchmark data resources
-            resources.extend(self.benchmark_data.get_resource_definitions())
+            raw_resources.extend(self.benchmark_data.get_resource_definitions())
+
+            # Convert dicts to MCP Resource objects
+            resources = [
+                Resource(
+                    uri=r["uri"],
+                    name=r["name"],
+                    description=r.get("description"),
+                    mimeType=r.get("mimeType"),
+                )
+                for r in raw_resources
+            ]
 
             logger.info(f"Listed {len(resources)} resources")
             return resources
@@ -254,9 +274,27 @@ class SynthonyMCPServer:
 
         # Prompts handlers
         @self.server.list_prompts()
-        async def list_prompts() -> List[Dict[str, Any]]:
+        async def list_prompts() -> List[Prompt]:
             """List all available prompts."""
-            prompts = self.workflow_prompts.get_prompt_definitions()
+            raw_prompts = self.workflow_prompts.get_prompt_definitions()
+
+            # Convert dicts to MCP Prompt objects
+            prompts = [
+                Prompt(
+                    name=p["name"],
+                    description=p.get("description"),
+                    arguments=[
+                        PromptArgument(
+                            name=arg["name"],
+                            description=arg.get("description"),
+                            required=arg.get("required", False),
+                        )
+                        for arg in p.get("arguments", [])
+                    ],
+                )
+                for p in raw_prompts
+            ]
+
             logger.info(f"Listed {len(prompts)} prompts")
             return prompts
 
