@@ -376,6 +376,8 @@ async def analyze_dataset(
             message=f"Analysis completed: {dataset_profile.row_count} rows × {dataset_profile.column_count} columns",
         )
 
+    except pd.errors.EmptyDataError:
+        raise HTTPException(status_code=400, detail="CSV or Parquet file is empty")
     except ValueError as e:
         # Storage quota or validation errors
         error_msg = log_error(session_id if 'session_id' in locals() else None, "analyze", e)
@@ -388,8 +390,6 @@ async def analyze_dataset(
             error_message=str(e),
         )
         raise HTTPException(status_code=400, detail=str(e))
-    except pd.errors.EmptyDataError:
-        raise HTTPException(status_code=400, detail="CSV or Parquet file is empty")
     except pd.errors.ParserError as e:
         raise HTTPException(status_code=400, detail=f"Failed to parse CSV or Parquet: {str(e)}")
     except Exception as e:
