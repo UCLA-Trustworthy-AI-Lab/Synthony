@@ -341,20 +341,21 @@ MIT License with prior authorization requirement — see [LICENSE.md](LICENSE.md
 
 ## Maintainer
 
-Hochan Son (ohsono@gmail.com)
-Xiaofeng Lin (Bernardo1998@g.ucla.edu)
-Jason Ni (jasonni@ucla.edu)
-Guang Cheng (cheng@ucla.edu)
+- Hochan Son (ohsono@gmail.com,hochanson@g.ucla.edu)
+- Xiaofeng Lin (Bernardo1998@g.ucla.edu)
+- Jason Ni (jasonni19@g.ucla.edu)
+- Guang Cheng (guangcheng@g.ucla.edu)
 
 ## Citation
 
 ```bibtex
-@software{synthony,
-  title = {Synthony: Intelligent Synthetic Data Model Recommendation},
-  author = {Son, Hochan, Xiaofeng Lin, Jason Ni, and Guang Cheng},
-  organization = {UCLA Trustworthy AI Lab},
-  url = {https://github.com/ohsono/Synthony},
-  year = {2025}
+@inproceedings{
+son2026synthony,
+title={{SYNTHONY}: A Stress-Aware, Intent-Conditioned Agent for Deep Tabular Generative Models Selection},
+author={Hochan Son and Xiaofeng Lin and Jason Ni and Guang Cheng},
+booktitle={ICLR 2026 2nd Workshop on Deep Generative Model in Machine Learning: Theory, Principle and Efficacy},
+year={2026},
+url={https://openreview.net/forum?id=cj4SNumWqf}
 }
 ```
 
