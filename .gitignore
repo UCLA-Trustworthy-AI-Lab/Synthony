@@ -22,6 +22,9 @@ baselines/api_key.json
 # frontend
 frontend/*
 
+# workspace file
+src/synthony/api/Synthony.code-workspace
+
 # Distribution / packaging
 .Python
 build/
