@@ -23,7 +23,6 @@ class SkewnessMetrics(BaseModel):
         default_factory=list, description="Columns with |skewness| > threshold (default 2.0)"
     )
 
-    # model_config = {"json_schema_extra": {"example": {"column_scores": {"age": 3.2, "income": 4.1}, "max_skewness": 4.1, "severe_columns": ["income"]}}}
 
 
 class CardinalityMetrics(BaseModel):
@@ -37,7 +36,6 @@ class CardinalityMetrics(BaseModel):
         default_factory=list, description="Columns with unique count > threshold (default 500)"
     )
 
-    # model_config = {"json_schema_extra": {"example": {"column_counts": {"user_id": 10000, "category": 50}, "max_cardinality": 10000, "high_cardinality_columns": ["user_id"]}}}
 
 
 class ZipfianMetrics(BaseModel):
@@ -52,7 +50,6 @@ class ZipfianMetrics(BaseModel):
         default_factory=list, description="Categorical columns exhibiting Zipfian behavior"
     )
 
-    # model_config = {"json_schema_extra": {"example": {"detected": True, "top_20_percent_ratio": 0.92, "affected_columns": ["category"]}}}
 
 
 class CorrelationMetrics(BaseModel):
@@ -89,13 +86,12 @@ class StressFactors(BaseModel):
     zipfian_distribution: bool = Field(
         description="Top 20% of categories contain >80% of data (power-law distribution)"
     )
-    small_data: bool = Field(description="Row count < 500 (overfitting risk)")
+    small_data: bool = Field(description="Row count < 1,000 (overfitting risk)")
     large_data: bool = Field(description="Row count > 50,000 (LLM context limitations)")
     higher_order_correlation: bool = Field(
         description="Dense correlation matrix with low linear R² (non-linear relationships)"
     )
 
-    # model_config = {"json_schema_extra": {"example": {"severe_skew": True, "high_cardinality": False, "zipfian_distribution": True, "small_data": False, "large_data": False, "higher_order_correlation": False}}}
 
 
 class DatasetProfile(BaseModel):

@@ -86,7 +86,8 @@ synthony-api = "synthony.api.server:main"
 synthony-mcp = "mcp_server.server:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["synthony*", "mcp_server*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
