@@ -4,7 +4,7 @@
 
 [![Paper](https://img.shields.io/badge/ICLR%202026-DeLTa%20Workshop-blueviolet)](https://openreview.net/forum?id=cj4SNumWqf)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT-NC](https://img.shields.io/badge/License-MIT--NC-blue.svg)](LICENSE.md)
 
 Synthony is an intelligent recommendation platform that analyzes your tabular dataset's characteristics and recommends the optimal synthetic data generation model from 15 state-of-the-art options. Like a symphony conductor orchestrating instruments, Synthony orchestrates the right model for your data.
 
@@ -343,9 +343,9 @@ Contributions welcome! Please see `CLAUDE.md` for architecture details and codin
 
 ## License
 
-MIT License with prior authorization requirement — see [LICENSE.md](LICENSE.md) for details.
+MIT-NC (MIT Non-Commercial) — free for academic and research use with attribution; commercial use requires prior written authorization from the copyright holder. See [LICENSE.md](LICENSE.md) for full terms.
 
-**Note**: Prior written authorization from the author or UCLA Trustworthy AI Lab is required before public distribution or commercial use.
+For commercial licensing inquiries: ohsono@gmail.com / hochanson@g.ucla.edu
 
 ## Maintainer
 
