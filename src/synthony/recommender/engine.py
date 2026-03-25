@@ -32,7 +32,7 @@ class EngineConfig:
     zipfian_threshold: float = 0.05      # Top 20% ratio above this = Zipfian
     
     # Size thresholds
-    small_data_threshold: int = 999      # Rows below this = small data (tie-break to ARF)
+    small_data_threshold: int = 1000     # Rows below this = small data (tie-break to ARF)
     large_data_threshold: int = 50000    # Rows above this = large data (GReaT too slow)
     
     # Tie-breaking

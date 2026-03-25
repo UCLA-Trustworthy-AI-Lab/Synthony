@@ -34,8 +34,8 @@ class AnalyzerConfig:
     zipfian_ratio: float = 0.80
     """Top 20% categories > 80% of data indicates power-law distribution."""
 
-    small_data_threshold: int = 500
-    """< 500 rows risks overfitting without tree-based models."""
+    small_data_threshold: int = 1000
+    """< 1,000 rows risks overfitting without tree-based models."""
 
     large_data_threshold: int = 50000
     """> 50k rows makes LLM-based synthesis impractical."""
@@ -89,7 +89,7 @@ THRESHOLD_DOCS = {
     "skewness_threshold": "Fisher-Pearson skewness > 2.0 indicates severe tail distribution that breaks basic GANs/VAEs",
     "cardinality_threshold": "Unique values > 500 risks mode collapse in generative models",
     "zipfian_ratio": "Top 20% categories > 80% of data indicates power-law distribution requiring specialized tokenization",
-    "small_data_threshold": "< 500 rows risks overfitting without tree-based models like ARF",
+    "small_data_threshold": "< 1,000 rows risks overfitting without tree-based models like ARF",
     "large_data_threshold": "> 50k rows makes LLM-based synthesis impractical due to context window limitations",
     "correlation_density_threshold": "Fraction of pairs with strong correlation to consider matrix 'dense'",
     "correlation_strength_threshold": "Minimum correlation strength to count as 'correlated'",

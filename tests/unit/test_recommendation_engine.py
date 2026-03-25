@@ -150,7 +150,7 @@ class TestRecommendationEngine:
             assert alt.model_name in dp_models
 
     def test_small_data_recommendation(self, small_data_profile):
-        """Small data should prefer ARF or GaussianCopula."""
+        """Small data should prefer ARF (best small-data model in registry)."""
         engine = ModelRecommendationEngine()
 
         result = engine.recommend(
@@ -160,15 +160,14 @@ class TestRecommendationEngine:
             top_n=3,
         )
 
-        # ARF and GaussianCopula are best for small data
-        # Should be recommended or in top alternatives
+        # ARF is the registry's top-rated model for small data
         all_models = [result.recommended_model.model_name]
         all_models.extend([alt.model_name for alt in result.alternative_models])
 
-        assert "ARF" in all_models or "GaussianCopula" in all_models
+        assert "ARF" in all_models
 
     def test_large_data_excludes_llm_models(self, large_data_profile):
-        """Large data should exclude LLM models (too slow)."""
+        """Large data should route away from GReaT (LLM model, too slow)."""
         engine = ModelRecommendationEngine()
 
         result = engine.recommend(
@@ -178,15 +177,17 @@ class TestRecommendationEngine:
             top_n=5,
         )
 
-        # GReaT was removed (not benchmarked), test for GPU models instead
-        # Check that slow/GPU models are deprioritized for large data
-        assert result.recommended_model is not None
+        # GReaT is the hard-problem primary but is excluded for large data;
+        # engine falls back to hard_problem_large_data_fallback instead.
+        assert result.recommended_model.model_name != "GReaT"
+        all_models = [result.recommended_model.model_name]
+        all_models.extend([alt.model_name for alt in result.alternative_models])
+        assert "GReaT" not in all_models
 
     def test_top_n_parameter(self, mock_dataset_profile):
         """top_n should control number of alternatives."""
         engine = ModelRecommendationEngine()
 
-        # Request 5 alternatives
         result = engine.recommend(
             dataset_profile=mock_dataset_profile,
             constraints=RecommendationConstraints(cpu_only=False, strict_dp=False),
@@ -194,8 +195,8 @@ class TestRecommendationEngine:
             top_n=5,
         )
 
-        # Should have up to 4 alternatives (5 total - 1 recommended)
-        assert len(result.alternative_models) <= 5  # top_n controls total, alternatives = top_n - 1
+        # Engine returns exactly top_n alternatives (registry has 15 models, plenty available)
+        assert len(result.alternative_models) == 5
 
     def test_excluded_models_with_reasons(self, mock_dataset_profile):
         """Excluded models should have explanations."""

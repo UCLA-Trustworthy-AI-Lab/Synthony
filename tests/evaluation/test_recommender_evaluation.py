@@ -255,12 +255,17 @@ class TestStressProfileAccuracy:
 
     @pytest.mark.parametrize("dataset_name", DATASET_NAMES)
     def test_no_small_data_flag(self, all_profiles, dataset_name):
-        """None of the 11 datasets should trigger small_data (all >= 500 rows)."""
+        """Datasets with >= 1000 rows should not trigger small_data (threshold = 1000)."""
         profile = all_profiles[dataset_name]
-        # All 11 datasets have >= 579 rows, well above the 500 threshold in schemas
-        assert profile.stress_factors.small_data is False, (
-            f"{dataset_name} ({profile.row_count} rows) should not be flagged as small_data"
-        )
+        expected_rows = DATASET_GROUND_TRUTH[dataset_name]["rows"]
+        if expected_rows >= 1000:
+            assert profile.stress_factors.small_data is False, (
+                f"{dataset_name} ({profile.row_count} rows) should not be flagged as small_data"
+            )
+        else:
+            assert profile.stress_factors.small_data is True, (
+                f"{dataset_name} ({profile.row_count} rows) should be flagged as small_data"
+            )
 
 
 # ===========================================================================
