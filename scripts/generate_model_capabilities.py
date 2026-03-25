@@ -12,7 +12,7 @@ Usage:
 import json
 import argparse
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 from datetime import datetime
 
 import numpy as np

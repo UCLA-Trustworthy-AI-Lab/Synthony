@@ -10,7 +10,7 @@ from synthony.detectors.correlation import CorrelationDetector
 from synthony.detectors.data_size import DataSizeClassifier
 from synthony.detectors.skewness import SkewnessDetector
 from synthony.utils.constants import AnalyzerConfig, DEFAULT_CONFIG
-from synthony.core.errors import ValidationError, UnsupportedFormatError
+from synthony.core.errors import ValidationError
 
 class StochasticDataAnalyzer:
     """

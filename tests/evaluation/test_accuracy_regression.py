@@ -9,12 +9,11 @@ the benchmark winner should appear in top-N, scores should differentiate
 models, and constraints should be respected.
 """
 
-import os
 import pytest
 from pathlib import Path
 
 from synthony import StochasticDataAnalyzer
-from synthony.recommender.engine import ModelRecommendationEngine, EngineConfig
+from synthony.recommender.engine import ModelRecommendationEngine
 
 # Ground truth from spark benchmarks (Column_Shape_Avg metric)
 GROUND_TRUTH = {
