@@ -16,7 +16,6 @@ import numpy as np
 import pandas as pd
 
 from baselines.common import (
-    FOCUS_NAMES,
     OVERLAP_MODELS,
     evaluate_baseline,
     find_csv,
