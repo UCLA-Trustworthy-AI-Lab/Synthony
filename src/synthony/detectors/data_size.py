@@ -4,34 +4,33 @@ Data size classification.
 Classifies datasets as small or large based on row count thresholds.
 """
 
-from typing import Dict
 
 
 class DataSizeClassifier:
     """Classify dataset size as small/normal/large.
 
-    Small datasets (<500 rows) risk overfitting without tree-based models.
+    Small datasets (<1,000 rows) risk overfitting without tree-based models.
     Large datasets (>50k rows) make LLM-based synthesis impractical due to
     context window limitations and computational cost.
     """
 
     def __init__(
             self,
-            small_threshold: int = 500,
+            small_threshold: int = 1000,
             large_threshold: int = 50000
             ):
         """Initialize data size classifier.
 
         Args:
             small_threshold: Row count below which to flag as "small data".
-                           Default 500 from architecture docs.
+                           Default 1,000 from architecture docs.
             large_threshold: Row count above which to flag as "large data".
                            Default 50,000 from architecture docs.
         """
         self.small_threshold = small_threshold
         self.large_threshold = large_threshold
 
-    def classify(self, row_count: int) -> Dict[str, bool]:
+    def classify(self, row_count: int) -> dict[str, bool]:
         """Simple threshold-based classification.
 
         Args:
@@ -39,7 +38,7 @@ class DataSizeClassifier:
 
         Returns:
             Dictionary with boolean flags:
-            - small_data: True if < small_threshold (default 500)
+            - small_data: True if < small_threshold (default 1,000)
             - large_data: True if > large_threshold (default 50,000)
 
         Note:

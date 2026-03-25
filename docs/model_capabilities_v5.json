@@ -1,0 +1,491 @@
+{
+  "metadata": {
+    "version": "5.0.0",
+    "last_updated": "2026-02-01",
+    "source": "Generated from benchmarks via generate_model_capabilities.py",
+    "description": "Model capabilities derived from empirical benchmark results",
+    "compatible_models_count": 15
+  },
+  "models": {
+    "TVAE": {
+      "name": "TVAE",
+      "full_name": "Tabular Variational Autoencoder",
+      "type": "VAE",
+      "package": "table-synthesizers",
+      "capabilities": {
+        "skew_handling": 0,
+        "cardinality_handling": 0,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 4,
+        "privacy_dp": 0
+      },
+      "constraints": {
+        "requires_gpu": true,
+        "cpu_only_compatible": false,
+        "max_recommended_rows": 100000,
+        "min_rows": 200
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Mixed data types",
+        "General use"
+      ],
+      "benchmark_count": 2
+    },
+    "TabDDPM": {
+      "name": "TabDDPM",
+      "full_name": "Tabular Denoising Diffusion Probabilistic Model",
+      "type": "Diffusion",
+      "package": "table-synthesizers",
+      "capabilities": {
+        "skew_handling": 0,
+        "cardinality_handling": 0,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 2,
+        "privacy_dp": 0
+      },
+      "constraints": {
+        "requires_gpu": true,
+        "cpu_only_compatible": false,
+        "max_recommended_rows": 100000,
+        "min_rows": 1000
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "High-quality generation"
+      ],
+      "benchmark_count": 1
+    },
+    "SMOTE": {
+      "name": "SMOTE",
+      "full_name": "Synthetic Minority Oversampling Technique",
+      "type": "Statistical",
+      "package": "table-synthesizers",
+      "capabilities": {
+        "skew_handling": 0,
+        "cardinality_handling": 0,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 4,
+        "privacy_dp": 0
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 10
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Imbalanced datasets"
+      ],
+      "benchmark_count": 1
+    },
+    "Identity": {
+      "name": "Identity",
+      "full_name": "Identity Baseline",
+      "type": "Baseline",
+      "package": "table-synthesizers",
+      "capabilities": {
+        "skew_handling": 4,
+        "cardinality_handling": 4,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 4,
+        "privacy_dp": 0
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 1000000,
+        "min_rows": 1
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Testing",
+        "Baselines"
+      ],
+      "benchmark_count": 1
+    },
+    "DPCART": {
+      "name": "DPCART",
+      "full_name": "Differentially Private CART",
+      "type": "Tree-based + DP",
+      "package": "table-synthesizers",
+      "capabilities": {
+        "skew_handling": 0,
+        "cardinality_handling": 0,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 0,
+        "privacy_dp": 3
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 500
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Privacy + interpretability"
+      ],
+      "benchmark_count": 1
+    },
+    "CART": {
+      "name": "CART",
+      "full_name": "Classification and Regression Trees",
+      "type": "Tree-based",
+      "package": "table-synthesizers",
+      "capabilities": {
+        "skew_handling": 0,
+        "cardinality_handling": 0,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 4,
+        "privacy_dp": 0
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 50
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Interpretable models"
+      ],
+      "benchmark_count": 1
+    },
+    "ARF": {
+      "name": "ARF",
+      "full_name": "Adversarial Random Forest",
+      "type": "Tree-based",
+      "package": "synthcity",
+      "capabilities": {
+        "skew_handling": 0,
+        "cardinality_handling": 0,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 4,
+        "privacy_dp": 0
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 50
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Tree-based synthesis"
+      ],
+      "benchmark_count": 1
+    },
+    "AIM": {
+      "name": "AIM",
+      "full_name": "Adaptive and Iterative Mechanism",
+      "type": "Statistical + DP",
+      "package": "table-synthesizers",
+      "capabilities": {
+        "skew_handling": 0,
+        "cardinality_handling": 0,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 4,
+        "privacy_dp": 4
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 1000
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Privacy-sensitive applications"
+      ],
+      "benchmark_count": 1
+    },
+    "AutoDiff": {
+      "name": "AutoDiff",
+      "full_name": "VAE + Diffusion Hybrid",
+      "type": "Diffusion",
+      "package": "table-synthesizers",
+      "capabilities": {
+        "skew_handling": 0,
+        "cardinality_handling": 0,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 0,
+        "privacy_dp": 0
+      },
+      "constraints": {
+        "requires_gpu": true,
+        "cpu_only_compatible": false,
+        "max_recommended_rows": 100000,
+        "min_rows": 1000
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Complex data distributions"
+      ],
+      "benchmark_count": 1
+    },
+    "BayesianNetwork": {
+      "name": "BayesianNetwork",
+      "full_name": "Bayesian Network Synthesis",
+      "type": "Statistical",
+      "package": "synthcity",
+      "capabilities": {
+        "skew_handling": 0,
+        "cardinality_handling": 0,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 4,
+        "privacy_dp": 0
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 50000,
+        "min_rows": 100
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Causal relationships"
+      ],
+      "benchmark_count": 1
+    },
+    "TabSyn": {
+      "name": "TabSyn",
+      "full_name": "Advanced Tabular Synthesis",
+      "type": "Diffusion",
+      "package": "table-synthesizers",
+      "capabilities": {
+        "skew_handling": 2,
+        "cardinality_handling": 2,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 2,
+        "privacy_dp": 0
+      },
+      "constraints": {
+        "requires_gpu": true,
+        "cpu_only_compatible": false,
+        "max_recommended_rows": 100000,
+        "min_rows": 1000
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Fast generation"
+      ],
+      "benchmark_count": 0
+    },
+    "CTGAN": {
+      "name": "CTGAN",
+      "full_name": "Conditional Tabular GAN",
+      "type": "GAN",
+      "package": "table-synthesizers",
+      "capabilities": {
+        "skew_handling": 2,
+        "cardinality_handling": 2,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 2,
+        "privacy_dp": 0
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 500
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Large datasets"
+      ],
+      "benchmark_count": 0
+    },
+    "PATECTGAN": {
+      "name": "PATECTGAN",
+      "full_name": "Privacy-Aware CTGAN with PATE",
+      "type": "GAN + DP",
+      "package": "table-synthesizers",
+      "capabilities": {
+        "skew_handling": 2,
+        "cardinality_handling": 2,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 2,
+        "privacy_dp": 4
+      },
+      "constraints": {
+        "requires_gpu": true,
+        "cpu_only_compatible": false,
+        "max_recommended_rows": 100000,
+        "min_rows": 1000
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Privacy-sensitive applications"
+      ],
+      "benchmark_count": 0
+    },
+    "NFlow": {
+      "name": "NFlow",
+      "full_name": "Normalizing Flows",
+      "type": "Flow",
+      "package": "synthcity",
+      "capabilities": {
+        "skew_handling": 2,
+        "cardinality_handling": 2,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 2,
+        "privacy_dp": 0
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 200
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Probabilistic modeling"
+      ],
+      "benchmark_count": 0
+    },
+    "GReaT": {
+      "name": "GReaT",
+      "full_name": "Generation of Realistic Tabular data",
+      "type": "LLM-based",
+      "package": "synthcity",
+      "capabilities": {
+        "skew_handling": 2,
+        "cardinality_handling": 2,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 2,
+        "privacy_dp": 0
+      },
+      "constraints": {
+        "requires_gpu": true,
+        "cpu_only_compatible": false,
+        "max_recommended_rows": 10000,
+        "min_rows": 100
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "best_for": [
+        "Large language model approach"
+      ],
+      "benchmark_count": 0
+    }
+  },
+  "model_ranking_by_capability": {
+    "skew_handling": [
+      "Identity"
+    ],
+    "cardinality_handling": [
+      "Identity"
+    ],
+    "zipfian_handling": [],
+    "small_data": [],
+    "correlation_handling": [
+      "TVAE",
+      "SMOTE",
+      "Identity",
+      "CART",
+      "ARF"
+    ],
+    "privacy_dp": [
+      "AIM",
+      "PATECTGAN",
+      "DPCART"
+    ]
+  },
+  "tie_breaking_priority": {
+    "small_data_priority": [
+      "ARF",
+      "CART",
+      "BayesianNetwork",
+      "SMOTE"
+    ],
+    "speed_priority": [
+      "TVAE",
+      "CTGAN",
+      "ARF",
+      "CART",
+      "SMOTE"
+    ],
+    "quality_priority": [
+      "TabDDPM",
+      "TabSyn",
+      "AutoDiff",
+      "GReaT"
+    ]
+  }
+}

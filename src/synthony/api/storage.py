@@ -12,8 +12,6 @@ import os
 import re
 import shutil
 from pathlib import Path
-from typing import Optional, Tuple
-from uuid import uuid4
 
 
 class StorageManager:
@@ -60,7 +58,7 @@ class StorageManager:
         filename: str,
         session_id: str,
         dataset_id: str,
-    ) -> Tuple[str, int]:
+    ) -> tuple[str, int]:
         """Save uploaded file to persistent storage.
 
         Args:
@@ -118,7 +116,7 @@ class StorageManager:
 
         return str(file_path), file_size
 
-    def get_file(self, dataset_id: str, session_id: str) -> Optional[Path]:
+    def get_file(self, dataset_id: str, session_id: str) -> Path | None:
         """Retrieve file path for dataset.
 
         Args:
@@ -154,7 +152,7 @@ class StorageManager:
             return True
         return False
 
-    def delete_session(self, session_id: str) -> Tuple[int, int]:
+    def delete_session(self, session_id: str) -> tuple[int, int]:
         """Delete all files for a session.
 
         Args:
@@ -222,7 +220,7 @@ class StorageManager:
 
 
 # Global storage manager instance
-_storage_manager: Optional[StorageManager] = None
+_storage_manager: StorageManager | None = None
 
 
 def get_storage_manager() -> StorageManager:

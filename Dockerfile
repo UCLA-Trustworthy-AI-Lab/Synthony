@@ -41,9 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy application code
+# Copy application code and config
 COPY src/ ./src/
-COPY docs/SystemPrompt_v3.md ./docs/SystemPrompt_v3.md
+COPY config/ ./config/
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash appuser && \
@@ -55,7 +55,7 @@ USER appuser
 ENV API_HOST=0.0.0.0 \
     API_PORT=8000 \
     API_WORKERS=2 \
-    SYNTHONY_SYSTEM_PROMPT=/app/docs/SystemPrompt_v3.md \
+    SYNTHONY_SYSTEM_PROMPT=/app/config/SystemPrompt.md \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 

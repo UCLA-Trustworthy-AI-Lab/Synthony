@@ -1,0 +1,872 @@
+{
+  "metadata": {
+    "version": "6.0.0",
+    "last_updated": "2026-02-04",
+    "source": "trial4 benchmarks (analysis_comparison.json) + literature for non-benchmarked models",
+    "description": "Model capabilities calibrated against empirical benchmark results from trial4 (8 datasets, 11 models). See docs/Scoring_system_inspection_summary_v6.md for methodology and change log."
+  },
+  "models": {
+    "GReaT": {
+      "name": "GReaT",
+      "full_name": "Generation of Realistic Tabular data",
+      "type": "LLM-based",
+      "package": "table-synthesizers",
+      "class_path": "be_great.GReaT",
+      "capabilities": {
+        "skew_handling": 4,
+        "cardinality_handling": 4,
+        "zipfian_handling": 4,
+        "small_data": 2,
+        "correlation_handling": 3,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "literature",
+      "constraints": {
+        "requires_gpu": true,
+        "cpu_only_compatible": false,
+        "max_recommended_rows": 10000,
+        "min_rows": 100
+      },
+      "performance": {
+        "training_speed": "slow",
+        "inference_speed": "slow",
+        "memory_usage": "high"
+      },
+      "description": "LLM-based synthesizer using GPT-2. Excellent for extreme skew, high cardinality, and Zipfian distributions. Best overall model for complex data but slow on large datasets.",
+      "strengths": [
+        "Handles extreme skewness (>4.0) better than any model",
+        "Superior rare category capture (Zipfian distributions)",
+        "Excellent high cardinality handling (>5000 unique values)",
+        "Captures complex semantic relationships"
+      ],
+      "limitations": [
+        "Very slow training (hours for 10k+ rows)",
+        "High memory requirements",
+        "Not suitable for large datasets (>10k rows in practice)",
+        "Requires GPU (eliminates if cpu_only constraint)"
+      ],
+      "exclude": true
+    },
+    "TabTree": {
+      "name": "TabTree",
+      "full_name": "TabTree",
+      "type": "Tree-based",
+      "package": "table-synthesizers",
+      "class_path": "tabtree.TabTree",
+      "capabilities": {
+        "skew_handling": 3,
+        "cardinality_handling": 4,
+        "zipfian_handling": 4,
+        "small_data": 4,
+        "correlation_handling": 3,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "literature",
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 1000000,
+        "min_rows": 50
+      },
+      "performance": {
+        "training_speed": "fast",
+        "inference_speed": "fast",
+        "memory_usage": "low"
+      },
+      "description": "Ensemble tree-based synthesizer. Excellent for high cardinality, Zipfian distributions, and small data. Fast and interpretable.",
+      "strengths": [
+        "Best for small datasets (<500 rows)",
+        "Excellent high cardinality handling",
+        "Superior Zipfian distribution capture",
+        "Very fast training and inference",
+        "Low memory footprint",
+        "Interpretable structure"
+      ],
+      "limitations": [
+        "Moderate skew handling (good but not as good as diffusion/LLM)",
+        "May struggle with very complex correlations"
+      ],
+      "exclude": true
+    },
+    "TabDDPM": {
+      "name": "TabDDPM",
+      "full_name": "Tabular Denoising Diffusion Probabilistic Model",
+      "type": "Diffusion",
+      "package": "table-synthesizers",
+      "class_path": "tabddpm.TabDDPM",
+      "capabilities": {
+        "skew_handling": 3,
+        "cardinality_handling": 2,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 2,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "trial4",
+      "trial4_empirical": {
+        "avg_quality_score": 0.685,
+        "avg_fidelity": 0.386,
+        "avg_utility": 0.910,
+        "skew_preservation": 0.875,
+        "cardinality_preservation": 0.625,
+        "correlation_preservation": 0.500,
+        "datasets_tested": 8
+      },
+      "constraints": {
+        "requires_gpu": true,
+        "cpu_only_compatible": false,
+        "max_recommended_rows": 100000,
+        "min_rows": 1000
+      },
+      "performance": {
+        "training_speed": "slow",
+        "inference_speed": "slow",
+        "memory_usage": "high"
+      },
+      "description": "Diffusion model for tabular data. Good skew preservation but low fidelity in trial4 benchmarks. Requires GPU.",
+      "strengths": [
+        "Good skew preservation (0.875)",
+        "High utility scores (0.910)",
+        "Strong privacy characteristics (0.548)"
+      ],
+      "limitations": [
+        "Requires GPU",
+        "Low fidelity (0.386 avg in trial4)",
+        "Moderate cardinality handling",
+        "Slow training and inference"
+      ],
+      "exclude": false
+    },
+    "TabSyn": {
+      "name": "TabSyn",
+      "full_name": "TabSyn",
+      "type": "Diffusion",
+      "package": "table-synthesizers",
+      "class_path": "tabsyn.TabSyn",
+      "capabilities": {
+        "skew_handling": 3,
+        "cardinality_handling": 3,
+        "zipfian_handling": 3,
+        "small_data": 2,
+        "correlation_handling": 3,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "literature",
+      "constraints": {
+        "requires_gpu": true,
+        "cpu_only_compatible": false,
+        "max_recommended_rows": 100000,
+        "min_rows": 1000
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "description": "Efficient diffusion model. Balanced performance across all stress factors. Good alternative to TabDDPM with faster training.",
+      "strengths": [
+        "Balanced score 3 across all major dimensions",
+        "Faster than TabDDPM",
+        "Good quality/speed tradeoff",
+        "Handles most stress factors well"
+      ],
+      "limitations": [
+        "Requires GPU (eliminates if cpu_only constraint)",
+        "Not optimal for extreme cases (score 3 vs 4)",
+        "Not ideal for small data"
+      ],
+      "exclude": true
+    },
+    "AutoDiff": {
+      "name": "AutoDiff",
+      "full_name": "AutoDiff",
+      "type": "Diffusion",
+      "package": "table-synthesizers",
+      "class_path": "autodiff.AutoDiff",
+      "capabilities": {
+        "skew_handling": 2,
+        "cardinality_handling": 3,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 0,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "trial4",
+      "trial4_empirical": {
+        "avg_quality_score": 0.559,
+        "avg_fidelity": 0.360,
+        "avg_utility": 0.702,
+        "skew_preservation": 0.500,
+        "cardinality_preservation": 0.875,
+        "correlation_preservation": 0.125,
+        "datasets_tested": 8
+      },
+      "constraints": {
+        "requires_gpu": true,
+        "cpu_only_compatible": false,
+        "max_recommended_rows": 100000,
+        "min_rows": 1000
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "description": "Automated diffusion model. Good cardinality handling but poor correlation and fidelity in trial4 benchmarks.",
+      "strengths": [
+        "Good cardinality handling (0.875 preservation)",
+        "Automated hyperparameter selection"
+      ],
+      "limitations": [
+        "Requires GPU",
+        "Very low fidelity (0.360 avg in trial4)",
+        "Fails on correlation preservation (0.125)",
+        "Low overall quality (0.559)"
+      ],
+      "exclude": false
+    },
+    "CTGAN": {
+      "name": "CTGAN",
+      "full_name": "Conditional Tabular GAN",
+      "type": "GAN",
+      "package": "table-synthesizers",
+      "class_path": "ctgan.CTGAN",
+      "capabilities": {
+        "skew_handling": 1,
+        "cardinality_handling": 3,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 2,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "literature",
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 500
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "fast",
+        "memory_usage": "moderate"
+      },
+      "description": "Conditional GAN with mode-specific normalization. Good for high cardinality but struggles with severe skew.",
+      "strengths": [
+        "Good cardinality handling (score 3)",
+        "CPU compatible",
+        "Moderate speed",
+        "Well-established baseline"
+      ],
+      "limitations": [
+        "Poor skew handling (score 1) - fails on |skew| > 2.0",
+        "Mode collapse risk on Zipfian data",
+        "Not ideal for small data"
+      ],
+      "exclude": true
+    },
+    "TVAE": {
+      "name": "TVAE",
+      "full_name": "Tabular Variational Autoencoder",
+      "type": "VAE",
+      "package": "table-synthesizers",
+      "class_path": "tvae.TVAE",
+      "capabilities": {
+        "skew_handling": 2,
+        "cardinality_handling": 3,
+        "zipfian_handling": 1,
+        "small_data": 3,
+        "correlation_handling": 0,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "trial4",
+      "trial4_empirical": {
+        "avg_quality_score": 0.796,
+        "avg_fidelity": 0.710,
+        "avg_utility": 0.869,
+        "skew_preservation": 0.500,
+        "cardinality_preservation": 0.875,
+        "correlation_preservation": 0.125,
+        "datasets_tested": 8
+      },
+      "constraints": {
+        "requires_gpu": true,
+        "cpu_only_compatible": false,
+        "max_recommended_rows": 100000,
+        "min_rows": 200
+      },
+      "performance": {
+        "training_speed": "fast",
+        "inference_speed": "fast",
+        "memory_usage": "low"
+      },
+      "description": "Variational autoencoder for tabular data. Good cardinality handling but fails on correlations. Fast and lightweight.",
+      "strengths": [
+        "Fast training and inference",
+        "Low memory usage",
+        "Good cardinality preservation (0.875)",
+        "Decent for small data (score 3)"
+      ],
+      "limitations": [
+        "Requires GPU",
+        "Fails on correlation preservation (0.125)",
+        "Moderate skew handling",
+        "Weak on Zipfian distributions"
+      ],
+      "exclude": false
+    },
+    "GaussianCopula": {
+      "name": "GaussianCopula",
+      "full_name": "Gaussian Copula",
+      "type": "Statistical",
+      "package": "table-synthesizers",
+      "class_path": "copula.GaussianCopula",
+      "capabilities": {
+        "skew_handling": 1,
+        "cardinality_handling": 1,
+        "zipfian_handling": 1,
+        "small_data": 4,
+        "correlation_handling": 2,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "literature",
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 50
+      },
+      "performance": {
+        "training_speed": "very_fast",
+        "inference_speed": "very_fast",
+        "memory_usage": "very_low"
+      },
+      "description": "Statistical copula-based synthesizer. Extremely fast and simple. Best for small, simple datasets without stress factors.",
+      "strengths": [
+        "Best for small data (score 4)",
+        "Extremely fast",
+        "Very low memory",
+        "Interpretable",
+        "Good baseline model"
+      ],
+      "limitations": [
+        "Fails on all stress factors (all score 1)",
+        "Cannot handle skew, high cardinality, or Zipfian",
+        "Only suitable for simple, well-behaved data"
+      ],
+      "exclude": true
+    },
+    "ARF": {
+      "name": "ARF",
+      "full_name": "Adversarial Random Forest",
+      "type": "Tree-based",
+      "package": "table-synthesizers",
+      "class_path": "arf.ARF",
+      "capabilities": {
+        "skew_handling": 3,
+        "cardinality_handling": 3,
+        "zipfian_handling": 3,
+        "small_data": 4,
+        "correlation_handling": 1,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "trial4",
+      "trial4_empirical": {
+        "avg_quality_score": 0.971,
+        "avg_fidelity": 0.950,
+        "avg_utility": 0.984,
+        "skew_preservation": 0.875,
+        "cardinality_preservation": 0.875,
+        "correlation_preservation": 0.375,
+        "datasets_tested": 8
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 50
+      },
+      "performance": {
+        "training_speed": "fast",
+        "inference_speed": "fast",
+        "memory_usage": "low"
+      },
+      "description": "Random forest-based synthesizer. Top-5 quality in trial4 benchmarks. Excellent for small data, good skew and cardinality handling. Fast and robust.",
+      "strengths": [
+        "High overall quality (0.971 avg)",
+        "Excellent fidelity (0.950 avg)",
+        "Best for small data (score 4)",
+        "Good skew preservation (0.875)",
+        "Good cardinality preservation (0.875)",
+        "Fast and efficient, CPU compatible"
+      ],
+      "limitations": [
+        "Poor correlation preservation (0.375)",
+        "Not ideal for correlation-sensitive use cases"
+      ],
+      "exclude": false
+    },
+    "PATE-CTGAN": {
+      "name": "PATE-CTGAN",
+      "full_name": "PATE-GAN with CTGAN",
+      "type": "GAN + DP",
+      "package": "table-synthesizers",
+      "class_path": "pate_ctgan.PATECTGAN",
+      "capabilities": {
+        "skew_handling": 1,
+        "cardinality_handling": 2,
+        "zipfian_handling": 2,
+        "small_data": 1,
+        "correlation_handling": 2,
+        "privacy_dp": 4
+      },
+      "capabilities_source": "literature",
+      "constraints": {
+        "requires_gpu": true,
+        "cpu_only_compatible": false,
+        "max_recommended_rows": 100000,
+        "min_rows": 1000
+      },
+      "performance": {
+        "training_speed": "slow",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "description": "Differential privacy GAN using PATE framework. Only use if strict DP is required. Lower quality than non-DP models.",
+      "strengths": [
+        "Strong differential privacy (score 4)",
+        "Formal privacy guarantees"
+      ],
+      "limitations": [
+        "Requires GPU",
+        "Poor utility on all stress factors (score 1-2)",
+        "Only use if DP is mandatory constraint",
+        "Requires large datasets (>1000 rows) for DP",
+        "Quality degradation from privacy noise"
+      ],
+      "exclude": true
+    },
+    "AIM": {
+      "name": "AIM",
+      "full_name": "Adaptive and Iterative Mechanism",
+      "type": "Statistical + DP",
+      "package": "table-synthesizers",
+      "class_path": "aim.AIM",
+      "capabilities": {
+        "skew_handling": 3,
+        "cardinality_handling": 0,
+        "zipfian_handling": 1,
+        "small_data": 2,
+        "correlation_handling": 1,
+        "privacy_dp": 4
+      },
+      "capabilities_source": "trial4",
+      "trial4_empirical": {
+        "avg_quality_score": 0.537,
+        "avg_fidelity": 0.323,
+        "avg_utility": 0.781,
+        "skew_preservation": 0.875,
+        "cardinality_preservation": 0.125,
+        "correlation_preservation": 0.375,
+        "datasets_tested": 8
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 1000
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "fast",
+        "memory_usage": "low"
+      },
+      "description": "Statistical DP synthesizer. Preserves skew well but fails on cardinality. Only use if strict DP is required.",
+      "strengths": [
+        "Strong differential privacy (score 4)",
+        "Good skew preservation (0.875)",
+        "CPU compatible",
+        "Low memory usage"
+      ],
+      "limitations": [
+        "Lowest overall quality (0.537 avg)",
+        "Fails on cardinality (0.125 preservation)",
+        "Low fidelity (0.323 avg)",
+        "Only use if DP is mandatory"
+      ],
+      "exclude": false
+    },
+    "DPCART": {
+      "name": "DPCART",
+      "full_name": "Differentially Private CART",
+      "type": "Tree-based + DP",
+      "package": "table-synthesizers",
+      "class_path": "dpcart.DPCART",
+      "capabilities": {
+        "skew_handling": 3,
+        "cardinality_handling": 2,
+        "zipfian_handling": 2,
+        "small_data": 3,
+        "correlation_handling": 1,
+        "privacy_dp": 3
+      },
+      "capabilities_source": "trial4",
+      "trial4_empirical": {
+        "avg_quality_score": 0.763,
+        "avg_fidelity": 0.718,
+        "avg_utility": 0.851,
+        "skew_preservation": 0.875,
+        "cardinality_preservation": 0.500,
+        "correlation_preservation": 0.250,
+        "datasets_tested": 8
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 500
+      },
+      "performance": {
+        "training_speed": "fast",
+        "inference_speed": "fast",
+        "memory_usage": "low"
+      },
+      "description": "Differentially private decision tree. Better utility than AIM with moderate DP. Good skew preservation.",
+      "strengths": [
+        "Moderate differential privacy (score 3)",
+        "Good skew preservation (0.875)",
+        "Better utility than PATE-CTGAN/AIM",
+        "Fast and efficient",
+        "Decent for small data (score 3)"
+      ],
+      "limitations": [
+        "Lower quality than non-DP models",
+        "Poor correlation preservation (0.250)",
+        "Moderate cardinality handling"
+      ],
+      "exclude": false
+    },
+    "BayesianNetwork": {
+      "name": "BayesianNetwork",
+      "full_name": "Bayesian Network Synthesis",
+      "type": "Statistical",
+      "package": "synthcity",
+      "class_path": "bayesian_network.BayesianNetwork",
+      "capabilities": {
+        "skew_handling": 3,
+        "cardinality_handling": 3,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 2,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "trial4",
+      "trial4_empirical": {
+        "avg_quality_score": 0.974,
+        "avg_fidelity": 0.956,
+        "avg_utility": 0.985,
+        "skew_preservation": 0.875,
+        "cardinality_preservation": 0.875,
+        "correlation_preservation": 0.500,
+        "datasets_tested": 8
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 50000,
+        "min_rows": 100
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "fast",
+        "memory_usage": "moderate"
+      },
+      "description": "Bayesian network synthesizer. Top-4 quality in trial4 benchmarks. Excellent fidelity and utility with good skew and cardinality handling.",
+      "strengths": [
+        "Very high overall quality (0.974 avg)",
+        "Excellent fidelity (0.956 avg)",
+        "Good skew preservation (0.875)",
+        "Good cardinality preservation (0.875)",
+        "CPU compatible"
+      ],
+      "limitations": [
+        "Moderate correlation preservation (0.500)",
+        "Limited to ~50k rows",
+        "No differential privacy"
+      ],
+      "exclude": false
+    },
+    "CART": {
+      "name": "CART",
+      "full_name": "Classification and Regression Trees",
+      "type": "Tree-based",
+      "package": "table-synthesizers",
+      "class_path": "cart.CART",
+      "capabilities": {
+        "skew_handling": 3,
+        "cardinality_handling": 4,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 2,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "trial4",
+      "trial4_empirical": {
+        "avg_quality_score": 0.989,
+        "avg_fidelity": 0.978,
+        "avg_utility": 0.996,
+        "skew_preservation": 0.875,
+        "cardinality_preservation": 1.000,
+        "correlation_preservation": 0.625,
+        "datasets_tested": 8
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 50
+      },
+      "performance": {
+        "training_speed": "fast",
+        "inference_speed": "fast",
+        "memory_usage": "low"
+      },
+      "description": "Decision tree synthesizer. Highest non-baseline quality in trial4. Perfect cardinality preservation and excellent fidelity.",
+      "strengths": [
+        "Highest quality of any model (0.989 avg)",
+        "Perfect cardinality preservation (1.000)",
+        "Excellent fidelity (0.978 avg)",
+        "Near-perfect utility (0.996 avg)",
+        "Fast, CPU compatible, low memory"
+      ],
+      "limitations": [
+        "Low privacy (0.057 - close to identity)",
+        "Moderate correlation preservation (0.625)",
+        "No differential privacy"
+      ],
+      "exclude": false
+    },
+    "NFlow": {
+      "name": "NFlow",
+      "full_name": "Normalizing Flows",
+      "type": "Flow",
+      "package": "synthcity",
+      "class_path": "nflow.NFlow",
+      "capabilities": {
+        "skew_handling": 4,
+        "cardinality_handling": 3,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 0,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "trial4",
+      "trial4_empirical": {
+        "avg_quality_score": 0.924,
+        "avg_fidelity": 0.845,
+        "avg_utility": 0.983,
+        "skew_preservation": 1.000,
+        "cardinality_preservation": 0.857,
+        "correlation_preservation": 0.000,
+        "datasets_tested": 7
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 200
+      },
+      "performance": {
+        "training_speed": "moderate",
+        "inference_speed": "moderate",
+        "memory_usage": "moderate"
+      },
+      "description": "Normalizing flow model. Perfect skew preservation (1.0) but completely fails on correlations. Good overall quality.",
+      "strengths": [
+        "Perfect skew preservation (1.000)",
+        "High overall quality (0.924 avg)",
+        "Good cardinality handling (0.857)",
+        "CPU compatible"
+      ],
+      "limitations": [
+        "Zero correlation preservation (0.000)",
+        "Not suitable for correlation-sensitive data",
+        "Only tested on 7 datasets (1 failure)"
+      ],
+      "exclude": false
+    },
+    "SMOTE": {
+      "name": "SMOTE",
+      "full_name": "Synthetic Minority Oversampling Technique",
+      "type": "Statistical",
+      "package": "table-synthesizers",
+      "class_path": "smote.SMOTE",
+      "capabilities": {
+        "skew_handling": 3,
+        "cardinality_handling": 3,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 2,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "trial4",
+      "trial4_empirical": {
+        "avg_quality_score": 0.979,
+        "avg_fidelity": 0.968,
+        "avg_utility": 0.981,
+        "skew_preservation": 0.857,
+        "cardinality_preservation": 0.857,
+        "correlation_preservation": 0.714,
+        "datasets_tested": 7
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 100000,
+        "min_rows": 10
+      },
+      "performance": {
+        "training_speed": "fast",
+        "inference_speed": "fast",
+        "memory_usage": "low"
+      },
+      "description": "Oversampling technique. Top-3 quality in trial4. Best correlation preservation among all benchmarked models (0.714).",
+      "strengths": [
+        "Very high quality (0.979 avg)",
+        "Best correlation preservation of benchmarked models (0.714)",
+        "Excellent fidelity (0.968 avg)",
+        "Fast, CPU compatible, low memory",
+        "Minimum row requirement of only 10"
+      ],
+      "limitations": [
+        "Low privacy (0.090)",
+        "Designed for oversampling, not full synthesis",
+        "Only tested on 7 datasets (1 failure)",
+        "No differential privacy"
+      ],
+      "exclude": false
+    },
+    "Identity": {
+      "name": "Identity",
+      "full_name": "Identity Baseline",
+      "type": "Baseline",
+      "package": "table-synthesizers",
+      "class_path": "identity.Identity",
+      "capabilities": {
+        "skew_handling": 3,
+        "cardinality_handling": 4,
+        "zipfian_handling": 2,
+        "small_data": 2,
+        "correlation_handling": 2,
+        "privacy_dp": 0
+      },
+      "capabilities_source": "trial4",
+      "trial4_empirical": {
+        "avg_quality_score": 0.989,
+        "avg_fidelity": 0.982,
+        "avg_utility": 0.992,
+        "skew_preservation": 0.875,
+        "cardinality_preservation": 1.000,
+        "correlation_preservation": 0.500,
+        "datasets_tested": 8
+      },
+      "constraints": {
+        "requires_gpu": false,
+        "cpu_only_compatible": true,
+        "max_recommended_rows": 1000000,
+        "min_rows": 1
+      },
+      "performance": {
+        "training_speed": "instant",
+        "inference_speed": "instant",
+        "memory_usage": "very_low"
+      },
+      "description": "Identity baseline (copies original data). Used as upper-bound reference. No privacy guarantees.",
+      "strengths": [
+        "Perfect reproduction of original data",
+        "Useful as quality baseline reference"
+      ],
+      "limitations": [
+        "No privacy (copies original data verbatim)",
+        "Not a real synthesizer",
+        "Should not be used in production"
+      ],
+      "exclude": true
+    }
+  },
+  "model_ranking_by_capability": {
+    "skew_handling": [
+      "GReaT",
+      "NFlow",
+      "TabTree",
+      "TabDDPM",
+      "TabSyn",
+      "DPCART",
+      "BayesianNetwork",
+      "ARF",
+      "CART",
+      "AIM",
+      "SMOTE",
+      "Identity"
+    ],
+    "cardinality_handling": [
+      "GReaT",
+      "TabTree",
+      "CART",
+      "Identity",
+      "TabSyn",
+      "CTGAN",
+      "ARF",
+      "BayesianNetwork",
+      "NFlow",
+      "AutoDiff",
+      "TVAE",
+      "SMOTE"
+    ],
+    "zipfian_handling": [
+      "GReaT",
+      "TabTree",
+      "TabSyn",
+      "ARF"
+    ],
+    "small_data": [
+      "GaussianCopula",
+      "TabTree",
+      "ARF",
+      "TVAE",
+      "DPCART"
+    ],
+    "correlation_handling": [
+      "GReaT",
+      "TabTree",
+      "TabSyn"
+    ],
+    "privacy_dp": [
+      "PATE-CTGAN",
+      "AIM",
+      "DPCART"
+    ]
+  },
+  "tie_breaking_priority": {
+    "small_data_priority": [
+      "ARF",
+      "CART",
+      "BayesianNetwork",
+      "SMOTE"
+    ],
+    "speed_priority": [
+      "CART",
+      "ARF",
+      "SMOTE",
+      "TVAE",
+      "DPCART"
+    ],
+    "quality_priority": [
+      "CART",
+      "SMOTE",
+      "BayesianNetwork",
+      "ARF",
+      "NFlow"
+    ]
+  }
+}

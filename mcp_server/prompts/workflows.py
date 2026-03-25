@@ -32,11 +32,6 @@ class WorkflowPrompts:
                         "name": "data_path",
                         "description": "Path to CSV or Parquet file to analyze",
                         "required": True
-                    },
-                    {
-                        "name": "constraints",
-                        "description": "JSON object with constraints (cpu_only, strict_dp)",
-                        "required": False
                     }
                 ]
             },
@@ -108,7 +103,6 @@ class WorkflowPrompts:
     async def _analyze_and_recommend(self, arguments: Dict[str, str]) -> Dict[str, Any]:
         """Generate analyze-and-recommend workflow prompt."""
         data_path = arguments.get("data_path", "[data_path]")
-        constraints = arguments.get("constraints", "{}")
 
         messages = [
             {
@@ -116,7 +110,6 @@ class WorkflowPrompts:
                 "content": f"""I need help selecting the best synthetic data generation model for my dataset.
 
 Dataset: {data_path}
-Constraints: {constraints}
 
 Please:
 1. Analyze the dataset stress profile (skewness, cardinality, zipfian ratio, correlation)

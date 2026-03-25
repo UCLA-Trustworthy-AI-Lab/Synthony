@@ -116,10 +116,6 @@ curl -X 'POST' 'http://localhost:8000/recommend' \
     "dataset_id": "my_dataset",
     "analysis_id": "e9544d9d-47d3-4151-88a9-f4c16909346c",
     "method": "hybrid",
-    "constraints": {
-      "cpu_only": false,
-      "strict_dp": false
-    },
     "top_n": 3
   }'
 ```
@@ -145,7 +141,7 @@ curl -X 'POST' 'http://localhost:8000/recommend' \
 Or do both steps at once:
 
 ```bash
-curl -X 'POST' 'http://localhost:8000/analyze-and-recommend?method=hybrid&cpu_only=false&top_n=3' \
+curl -X 'POST' 'http://localhost:8000/analyze-and-recommend?method=hybrid&top_n=3' \
   -H 'Content-Type: multipart/form-data' \
   -F 'file=@./data/HTRU2.csv'
 ```
@@ -168,17 +164,14 @@ curl -X 'POST' 'http://localhost:8000/analyze-and-recommend?dataset_id=my_datase
 curl -X 'GET' 'http://localhost:8000/models'
 ```
 
-### Filter Models by Capabilities
+### Filter Models by Type
 
 ```bash
-# CPU-only models
-curl 'http://localhost:8000/models?cpu_only=true'
-
-# Differential Privacy models
-curl 'http://localhost:8000/models?requires_dp=true'
-
 # GAN models only
 curl 'http://localhost:8000/models?model_type=GAN'
+
+# Diffusion models
+curl 'http://localhost:8000/models?model_type=Diffusion'
 ```
 
 ### Get Detailed Model Information
@@ -294,7 +287,6 @@ response = requests.post(
         "dataset_id": "my_data",
         "analysis_id": analysis_id,  # From previous step
         "method": "hybrid",
-        "constraints": {"cpu_only": True},
         "top_n": 5
     }
 )
@@ -313,8 +305,6 @@ with open("data.csv", "rb") as f:
         "http://localhost:8000/analyze-and-recommend",
         params={
             "method": "hybrid",
-            "cpu_only": False,
-            "strict_dp": False,
             "top_n": 3
         },
         files={"file": f}
@@ -347,7 +337,7 @@ print(f"Recommended: {result['recommendation']['recommended_model']['model_name'
 
 - **Diffusion**: TabDDPM, TabSyn, AutoDiff
 - **LLM-based**: GReaT
-- **Tree-based**: TabTree, ARF
+- **Tree-based**: ARF, CART
 - **GAN**: CTGAN
 - **VAE**: TVAE
 - **Statistical**: GaussianCopula
@@ -357,7 +347,7 @@ print(f"Recommended: {result['recommendation']['recommended_model']['model_name'
 
 - **High Cardinality**: CTGAN, TabDDPM, TabSyn
 - **Severe Skew**: GReaT, AutoDiff, TabDDPM
-- **Small Data**: GaussianCopula, TabTree, ARF
+- **Small Data**: GaussianCopula, ARF
 - **Privacy-Preserving**: PATE-CTGAN, AIM, DPCART
 
 ---

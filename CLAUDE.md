@@ -4,344 +4,238 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Synthony** is an intelligent orchestration platform that automatically recommends the optimal synthetic data generation model from 13+ State-of-the-Art (SOTA) models based on dataset characteristics. The system analyzes data "stress factors" (Skewness, Cardinality, Zipfian distributions) and matches them to model capabilities using a hybrid rule-based + LLM decision engine.
+**Synthony** is an intelligent orchestration platform that recommends the optimal synthetic tabular data generation model from 15 SOTA models based on dataset characteristics. It analyzes data "stress factors" (skewness, cardinality, Zipfian distributions) and matches them to model capabilities using a hybrid rule-based + LLM decision engine.
 
-**Architecture Transition**: The project is transitioning from a Package 3 FastAPI design to an **MCP (Model Context Protocol) server** architecture to enable direct integration with AI agents like Claude Code.
+**Published at the 2nd DeLTa Workshop, ICLR 2026** ([Paper](https://openreview.net/forum?id=cj4SNumWqf))
 
-## System Architecture
+## Common Commands
 
-The codebase is designed as a modular ecosystem with strict separation of concerns:
-
-### Package 1: `synthony` (Data Infrastructure)
-
-- **Purpose**: Standalone library for data ingestion and statistical profiling
-- **Core Class**: `StochasticDataAnalyzer`
-- **Responsibility**: Convert raw CSV/Parquet into a "Stress Profile" containing:
-  - Skewness metrics (Fisher-Pearson coefficient)
-  - Cardinality analysis (unique value counts)
-  - Zipfian distribution detection (top 20% category concentration)
-  - Correlation complexity (dense correlation matrix detection)
-- **Output**: Strictly typed JSON `DatasetProfile` (metadata only, not raw data)
-- **Tech Stack**: Pandas, Scipy, Polars (for performance)
-
-### Package 2: `table-synthesizers` (External Repository)
-
-- **Purpose**: Heavy-lifting training engine hosting 13+ SOTA models
-- **Models**: TabDDPM, TabSyn, AutoDiff, GReaT, TabTree, TVAE, CTGAN, PATE-CTGAN, DPCART, AIM, GaussianCopula, ARF
-- **Integration**: Synthony maintains a **Shadow Interface** (`model_capabilities.json`) to understand model capabilities without importing heavy dependencies
-- **Note**: This is an external repository; Synthony does not directly import these models
-
-### MCP Server (Orchestration Brain)
-
-**Replaces the original Package 3 FastAPI design**
-
-- **Purpose**: MCP server that exposes data profiling and model recommendation capabilities to AI agents
-- **Protocol**: JSON-RPC 2.0 over stdio transport (optimized for local AI agent communication)
-- **Core Advantage**: Bidirectional, stateful communication vs REST request/response pattern
-
-#### MCP Server Structure
-
-```
-mcp-server-synthony/
-├── server.py                      # Main MCP server entry point
-├── tools/
-│   ├── data_tools.py             # Dataset discovery and loading tools
-│   ├── profiling_tools.py        # Tools for Package 1 integration
-│   ├── model_tools.py            # Tools for Package 2 shadow interface
-│   └── recommendation_tools.py   # Hybrid rule-based + LLM engine
-├── resources/
-│   ├── model_registry.py         # Expose model capabilities
-│   ├── profile_cache.py          # Manage cached data profiles
-│   └── benchmark_data.py         # Historical benchmark results
-├── prompts/
-│   └── workflows.py              # Guided recommendation workflows
-└── schemas/
-    ├── tools_schema.json         # Tool definitions
-    └── resources_schema.json     # Resource templates
-```
-
-## MCP Server Capabilities
-
-### Tools (Model-Controlled, Actively Executable)
-
-| Tool | Purpose | Package Mapping | Status |
-|------|---------|-----------------|--------|
-| `list_datasets` | List available datasets in configured data directory | MCP Server: DataTools | ✅ Implemented |
-| `load_dataset` | Load dataset by name, return metadata and preview | MCP Server: DataTools | ✅ Implemented |
-| `analyze_stress_profile` | Extract skewness, cardinality, zipfian ratio (accepts `dataset_name` or `data_path`) | Package 1: StochasticDataAnalyzer | ✅ Implemented |
-| `check_model_constraints` | Validate constraints (cpu_only, strict_dp, data size limits) | Package 2: Shadow Interface | ✅ Implemented |
-| `rank_models_hybrid` | Score models 0-4 using rule-based + LLM decision logic | MCP Server: Recommendation Engine | ✅ Implemented |
-| `rank_models_rule` | Score models using ONLY rule-based approach (pure Python, no LLM) | MCP Server: Rule-Based Engine | ✅ Implemented |
-| `rank_models_llm` | Score models using ONLY LLM approach (requires OpenAI API) | MCP Server: LLM Engine | ✅ Implemented |
-| `get_tie_breaker_logic` | Resolve conflicts when models score within 5% | MCP Server: Tie-Breaker Rules | ✅ Implemented |
-| `explain_recommendation_reasoning` | Generate user-friendly explanation for model selection | MCP Server: LLM Narrative Engine | ✅ Implemented |
-| `generate_benchmark_dataset` | Create synthetic control datasets for validation | Package 1: BenchmarkGenerator | ✅ Implemented |
-| **`analyze_and_recommend`** | **[TODO] End-to-end workflow: analyze dataset + recommend model in single call (accepts `dataset_name`/`data_path` + `constraints`)** | **MCP Server: Workflow Tool** | **🚧 Not Implemented** |
-
-**Note:** Currently, end-to-end analysis + recommendation requires 2 sequential tool calls:
-1. `analyze_stress_profile` → get dataset profile
-2. `rank_models_hybrid` → get recommendations using profile
-
-The planned `analyze_and_recommend` tool will combine these into a single convenient call.
-
-### Resources (Application-Driven, Read-Only Context)
-
-| Resource URI | Content |
-|--------------|---------|
-| `models://registry` | Full model catalog with capability scores (0-4 scale) |
-| `datasets://profiles/{id}` | Cached analysis results for previously profiled data |
-| `benchmarks://thresholds` | Stress detector thresholds (Skew>2.0, Zipfian>0.05, Cardinality>500) |
-| `guidelines://system-prompt` | Current knowledge base (SystemPrompt.md) for scoring logic |
-| `benchmarks://results/{model}/{dataset_type}` | Historical WD/TVD validation results |
-
-### Prompts (User-Controlled Workflows)
-
-| Prompt | Arguments | Purpose |
-|--------|-----------|---------|
-| `/analyze-and-recommend` | `data_path`, `constraints` | Full workflow from data upload to model recommendation |
-| `/explain-hard-problem` | `dataset_id` | Deep dive into complex cases (severe skew, zipfian distributions) |
-| `/validate-recommendation` | `dataset_id`, `model_name` | Run offline benchmark validation |
-| `/update-knowledge-base` | `benchmark_results` | Refine SystemPrompt.md scores from empirical feedback |
-
-## Core Decision Logic
-
-The recommendation engine uses a **multi-stage funnel** approach:
-
-### 1. Hard Filters (Eliminates Impossible Options)
-
-- `cpu_only`: Removes GPU-dependent models (TabDDPM, TabSyn, GReaT)
-- `strict_dp`: Keeps only differential privacy models (PATE-CTGAN, DPCART, AIM)
-- `large_data` (>50k rows): Eliminates LLMs due to context window/latency constraints
-
-### 2. Stress Detection (Identifies Data Difficulty)
-
-Critical thresholds that define "Hard Problems":
-
-- **Severe Skew**: Skewness > 2.0 (disqualifies basic GANs/VAEs, favors Diffusion/LLMs)
-- **High Cardinality**: Unique count > 500 (triggers rare-category collapse checks)
-- **Zipfian Distribution**: Top 20% categories > 80% of data (requires specialized tokenization)
-- **Small Data**: Row count < 500 (forces ARF or GaussianCopula to prevent overfitting)
-- **Large Data**: Row count > 50k (eliminates LLMs)
-
-### 3. Model Scoring (0-4 Capability Scale)
-
-Models are scored across dimensions:
-
-- **Skew Handling**: GReaT (4), TabDDPM/TabSyn/AutoDiff/TabTree (3), ARF (2), Others (1)
-- **High Cardinality**: GReaT/TabTree (4), CTGAN/TabSyn/ARF (3), Others (1-2)
-- **Zipfian**: GReaT (4), TabSyn/TabTree/ARF (3), Others (1-2)
-- **Small Data**: ARF/GaussianCopula (4), TVAE/DPCART (3), Others (1-2)
-- **Privacy (DP)**: PATE-CTGAN/AIM (4), DPCART (3), Others (0)
-
-### 4. Tie-Breaking Rules
-
-When top models are within 5% score:
-
-- Rows < 500: Prefer ARF (best for small data)
-- Rows > 50k with "Hard Problem" (Skew>2 & Card>500 & Zipf>0.05): Prefer TabDDPM (GReaT too slow)
-- Otherwise: Prefer faster models (TVAE/ARF) over slower ones (Diffusion/LLMs)
-
-## Critical Design Patterns
-
-### "Hard Problem" Detection
-
-The system specifically identifies data characteristics that break traditional models:
-
-1. **The Long Tail**: LogNormal skew > 2.0 (basic GANs fail to capture tail distribution)
-2. **The Needle in Haystack**: Zipfian with 1000+ categories where top 10 = 90% volume (mode collapse risk)
-3. **The Small Data Trap**: < 500 rows (overfitting/memorization risk)
-
-### Shadow Interface Pattern
-
-`model_capabilities.json` maintains model metadata without importing heavy ML libraries:
-
-- Allows fast recommendation without loading TensorFlow/PyTorch
-- Decouples decision logic from model implementation
-- Enables independent versioning and updates
-
-### Benchmark-Driven Feedback Loop
-
-The system is designed to be self-correcting:
-
-1. **Analyze**: User uploads data → generate profile
-2. **Recommend**: Match profile to model using scores
-3. **Validate**: Run offline benchmarks (Wasserstein Distance, TVD) on synthetic control datasets
-4. **Refine**: Update `SystemPrompt.md` scores if empirical results differ from theoretical expectations
-
-### MCP Notification Pattern
-
-Use server-sent notifications when:
-
-- Benchmark validation completes and changes recommendation confidence
-- `SystemPrompt.md` knowledge base is updated from empirical feedback
-- New models are added to the registry
-
-## Key Algorithms
-
-### Zipfian Detection
-
-```
-1. Sort category counts in descending order
-2. Calculate cumulative sum of top 20%
-3. Ratio = (top 20% sum) / (total count)
-4. If ratio > 0.80, flag as Zipfian
-```
-
-### Higher-Order Correlation Detection
-
-```
-1. Compute full correlation matrix
-2. Check if > 50% of pairs have |correlation| > 0.1 (dense matrix)
-3. Compute linear R² for each feature pair
-4. If matrix is dense but R² is low, flag as higher-order correlation
-```
-
-## Validation Strategy
-
-### Synthetic Control Datasets
-
-Three benchmark datasets validate model scores:
-
-1. **Dataset A: "The Long Tail"**
-   - Generation: `scipy.stats.lognorm(s=0.95, scale=exp(5))`
-   - Metric: Wasserstein Distance < 0.1
-   - Tests: Skew handling (Score 3-4 should pass, Score 1 should fail)
-
-2. **Dataset B: "The Needle in Haystack"**
-   - 10k rows, 1000 categories, top 10 = 90% volume
-   - Metric: Rare category coverage ≥ 80%
-   - Tests: Zipfian/mode collapse resistance
-
-3. **Dataset C: "The Small Data Trap"**
-   - 200 rows multivariate
-   - Metric: R² > 0.6 on holdout set
-   - Tests: Overfitting prevention
-
-## Development Commands
-
-Note: This repository is in early stages. The following structure is planned:
-
-### Package 1 (synthony)
+### Installation
 
 ```bash
-# Run data profiler tests
-pytest tests/test_stochastic_analyzer.py
-
-# Generate benchmark datasets
-python -m src.benchmark.datasets
-
-# Profile a CSV file
-python -m src.profiler.analyze --input data.csv --output profile.json
+pip install -e .                  # Core only
+pip install -e ".[cli]"           # CLI tools (typer, rich)
+pip install -e ".[api]"           # FastAPI server
+pip install -e ".[llm]"           # LLM support (requires OPENAI_API_KEY)
+pip install -e ".[mcp]"           # MCP server
+pip install -e ".[all]"           # Everything
+pip install -e ".[dev]"           # Development (pytest, black, ruff, mypy)
+pip install -e ".[test]"          # Test suite (pytest, pytest-asyncio, mcp, openai)
+pip install -e ".[polars]"        # Polars dataframe support
 ```
 
-### MCP Server
+### CLI Commands
 
 ```bash
-# Configure data directory (optional, defaults to dataset/input_data/)
-export SYNTHONY_DATA_DIR=/path/to/your/datasets
+# Profile a dataset
+synthony-profile data.csv --verbose
+synthony-profile data.csv -o profile.json
 
-# Start MCP server (stdio transport for local AI agent)
-python -m mcp_server.server
+# Compare original vs synthetic data quality
+synthony-benchmark -r original.csv -s synthetic.csv --verbose
+synthony-benchmark -r original.csv -s synthetic.csv -o results.json
 
-# Start MCP server with verbose logging (prints all tool calls/responses to stderr)
+# Get model recommendation
+synthony-recommender -i data.csv --method hybrid
+synthony-recommender -i data.csv --method rulebased --cpu-only
+synthony-recommender -i data.csv --method llm --strict-dp
+```
+
+### Running Tests
+
+```bash
+pytest                                    # All tests with coverage
+pytest tests/unit/ -v                     # Unit tests only
+pytest tests/integration/ -v              # Integration tests only
+pytest tests/unit/test_skewness_detector.py::test_detect_severe_skew -v  # Single test
+pytest -m "not requires_llm"              # Exclude LLM-dependent tests
+pytest --cov=synthony --cov-report=html   # Coverage with HTML report
+```
+
+### Code Quality
+
+```bash
+black src/ tests/                         # Format
+ruff check src/ tests/                    # Lint
+mypy src/                                 # Type check
+```
+
+### Servers
+
+```bash
+# FastAPI REST server (via entry point or uvicorn)
+synthony-api
+uvicorn synthony.api.server:app --reload
+# Then visit http://localhost:8000/docs for API documentation
+
+# MCP server (via entry point or module)
+synthony-mcp
 python -m mcp_server.server --verbose
-# Shorthand:
-python -m mcp_server.server -v
-
-# Test MCP protocol
-python -m mcp_server.tests.test_protocol
-
-# Validate tool definitions
-python -m mcp_server.validator.check_tools
-
-# Run MCP server in debug mode
-MCP_DEBUG=1 python -m mcp_server.server
-
-# Test a specific tool via MCP JSON-RPC
-echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"analyze_stress_profile","arguments":{"data_path":"test.csv"}},"id":1}' | python -m mcp_server.server
-
-# Test with verbose output to see exactly what server receives/returns
-echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"analyze_stress_profile","arguments":{"data_path":"test.csv"}},"id":1}' | python -m mcp_server.server --verbose
 ```
 
-### MCP Discovery Commands
+### Docker
 
 ```bash
-# List all available tools
-echo '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":1}' | python -m mcp_server.server
-
-# List all resources
-echo '{"jsonrpc":"2.0","method":"resources/list","params":{},"id":1}' | python -m mcp_server.server
-
-# List all prompts
-echo '{"jsonrpc":"2.0","method":"prompts/list","params":{},"id":1}' | python -m mcp_server.server
+docker build -t synthony .                    # Production container
+docker build -f Dockerfile.mcp -t synthony-mcp .  # MCP server container
+docker-compose up                             # Full stack
 ```
 
-## Important Files
+## Architecture
 
-- `docs/architecture_v3.md`: Complete system architecture and design rationale
-- `docs/Implementation_plan.md`: Project roadmap and milestone tracking
-- `docs/SystemPrompt_v3.md`: Knowledge base with 0-4 model capability scores (used by LLM engine)
-- `docs/validation_plan_knowledge_base_v3.md`: Benchmark datasets and validation strategy
-- `model_capabilities.json`: (Planned) Static registry for MCP server decision engine
-- `mcp_server/server.py`: (Planned) Main MCP server entry point
-- `mcp_server/schemas/`: (Planned) JSON Schema definitions for tools and resources
+### Data Flow
 
-## Code Style Conventions
+```
+Input (CSV/Parquet)
+    ↓
+StochasticDataAnalyzer.analyze()         # src/synthony/core/analyzer.py
+    ├── SkewnessDetector                  # detectors/skewness.py
+    ├── CardinalityDetector               # detectors/cardinality.py (+ Zipfian)
+    ├── CorrelationDetector               # detectors/correlation.py
+    └── DataSizeClassifier                # detectors/data_size.py
+    ↓
+DatasetProfile (Pydantic)                 # core/schemas.py
+    ↓
+ModelRecommendationEngine.recommend()    # recommender/engine.py
+    ├── Load config from registry (thresholds, priorities)
+    ├── Apply hard filters (cpu_only, strict_dp, exclude, row limits)
+    ├── Hard Problem detection (skew + cardinality + zipfian)
+    ├── Capability scoring + empirical quality bonus
+    ├── GPU/CPU-aware tie-breaking
+    ├── [Optional] LLM scoring (with SystemPrompt)
+    └── [Optional] Focus/scale_factors for custom weighting
+    ↓
+RecommendationResult
+```
 
-Based on the architecture documents:
+### Key Components
 
-- Use strict type annotations for all data profile outputs (JSON schemas)
-- Maintain separation: Package 1 knows nothing about models; MCP Server knows nothing about heavy ML imports
-- All thresholds (e.g., Skew > 2.0, Cardinality > 500) should be configurable constants
-- Statistical calculations must use established libraries (scipy, numpy) rather than custom implementations
-- Decision logic must be deterministic and traceable (log reasoning chain)
+| Directory | Purpose |
+|-----------|---------|
+| `src/synthony/core/` | Data loading (`loaders.py`), analysis (`analyzer.py`), schemas (`schemas.py`) |
+| `src/synthony/detectors/` | Stress detection: skewness, cardinality, correlation, data_size |
+| `src/synthony/recommender/` | Recommendation engine + model capabilities registry |
+| `src/synthony/api/` | FastAPI REST server with SQLite persistence |
+| `src/synthony/benchmark/` | Data quality metrics (KL/JS divergence, fidelity, utility, privacy) |
+| `src/synthony/utils/` | Configuration constants (`AnalyzerConfig`), thresholds |
+| `mcp_server/` | MCP protocol server for AI agent integration (tools, resources, prompts) |
+| `config/` | Model capabilities registry (`model_capabilities.json`), LLM system prompt |
+| `scripts/` | Optimization scripts (`optimize_scaling.py` for Bayesian calibration) |
+| `ablation/` | Ablation study runner (`run_ablations.py`) |
+| `tests/` | Unit, integration, functional, evaluation, and regression tests |
 
-### MCP-Specific Conventions
+### Stress Detection Thresholds
 
-- Tool descriptions must be detailed enough for AI agents to understand when to call them
-- All tool inputs use JSON Schema validation
-- Resources should be versioned and support efficient caching
-- Use resource templates for parameterized access (e.g., `datasets://profiles/{id}`)
-- Implement idempotent tools where possible
-- Return structured, clearly-formatted results from all tools
+Defined in `src/synthony/utils/constants.py`:
 
-## Testing Philosophy
+| Factor | Threshold | Impact |
+|--------|-----------|--------|
+| Severe Skew | \|skewness\| > 2.0 | Breaks basic GANs/VAEs |
+| High Cardinality | unique > 500 | Mode collapse risk |
+| Zipfian Distribution | Top 20% > 80% | Requires specialized tokenization |
+| Small Data | rows < 1,000 | Overfitting risk → prefer ARF |
+| Large Data | rows > 50,000 | LLMs impractical due to latency |
 
-- **Unit Tests**: Each stress detector (Skew, Zipfian, Cardinality) has isolated tests
-- **Integration Tests**: Full pipeline from CSV → Profile → Recommendation
-- **Benchmark Tests**: Model scores validated against synthetic control datasets
-- **Regression Tests**: When `SystemPrompt.md` scores change, re-run all benchmarks to prevent degradation
-- **MCP Protocol Tests**: Validate JSON-RPC 2.0 compliance, tool execution, resource access
-- **Tool Schema Tests**: Ensure all tool inputs/outputs match declared JSON schemas
+### Model Registry
 
-## MCP Integration Notes
+`config/model_capabilities.json` (v7.0.0) tracks 15 models with 0-4 capability scores calibrated from spark benchmarks (10 datasets, 14 models) with density-normalized cardinality scoring:
+- **Diffusion**: TabDDPM, TabSyn, AutoDiff
+- **LLM/Transformer**: GReaT
+- **GAN**: CTGAN, PATECTGAN
+- **VAE**: TVAE
+- **Tree-based**: ARF, CART, DPCART
+- **Statistical**: BayesianNetwork, NFlow, SMOTE, AIM
+- **Baseline**: Identity
 
-### FastAPI to MCP Migration
+The registry also stores all engine configuration:
+- `metadata.dp_threshold` — DP filter threshold (default: 3)
+- `metadata.capability_thresholds` — 11 scoring thresholds
+- `metadata.hard_problem_confidence` — confidence scores for hard problem path
+- `metadata.score_decay` — match score decay curve (1.0/0.7/0.4/0.0)
+- `hard_problem_routing` — primary model, large data fallback, fallback priority
+- `tie_breaking_priority` — GPU/CPU/speed/small_data priority lists
 
-The original Package 3 design was FastAPI-based. The transition to MCP provides:
+## Environment Variables
 
-- **Stateful connections** vs stateless REST endpoints
-- **Bidirectional communication** for real-time benchmark updates
-- **Native AI agent integration** without HTTP overhead
-- **Capability negotiation** through MCP protocol handshake
+| Variable | Purpose |
+|----------|---------|
+| `SYNTHONY_DATA_DIR` | Dataset directory (default: `dataset/input_data`) |
+| `OPENAI_API_KEY` | Required for LLM-based recommendations |
+| `MCP_DEBUG` | Enable verbose MCP server logging |
 
-### Why MCP for This Project
+## Key Files
 
-1. **Direct Claude Code Integration**: AI agents can call profiling and recommendation tools directly
-2. **Resource Subscriptions**: Clients can subscribe to benchmark updates and knowledge base changes
-3. **Guided Workflows**: Prompts codify best practices for using the recommendation engine
-4. **No API Key Management**: Stdio transport eliminates authentication overhead for local use
-5. **Protocol Versioning**: MCP's capability negotiation ensures backwards compatibility
+- `src/synthony/core/schemas.py` - Pydantic models: `DatasetProfile`, `StressFactors`, `RecommendationResult`
+- `src/synthony/core/analyzer.py` - `StochasticDataAnalyzer` main profiling class
+- `src/synthony/recommender/engine.py` - `ModelRecommendationEngine` core scoring logic (1,400+ lines)
+- `src/synthony/utils/constants.py` - `AnalyzerConfig` with all configurable thresholds
+- `config/model_capabilities.json` - Model registry v7.0.0 (15 models × 6 capability dims)
+- `config/SystemPrompt.md` - LLM system prompt v5.0 (canonical, used by engine)
+- `scripts/optimize_scaling.py` - Bayesian optimization of scale factors (Optuna/TPE)
+- `ablation/run_ablations.py` - Ablation study experiment runner
+- `docs/scoring_methodology.md` - Capability scoring formulas and engine pipeline
 
-### Using the MCP Server with Claude Code
+## MCP Server Integration
 
-When the MCP server is configured, Claude Code can:
+The MCP server exposes tools for AI agents:
 
-- Call `list_datasets` to discover available datasets in the data directory
-- Call `load_dataset` to inspect dataset metadata and preview rows
-- Call `analyze_stress_profile` with `dataset_name` to profile a dataset
-- Query `models://registry` to see all available synthesis models
-- Execute `rank_models_hybrid` to get recommendations
-- Use `/analyze-and-recommend` prompt for full guided workflow
-- Subscribe to `benchmarks://results` to monitor validation updates
+| Tool | Purpose |
+|------|---------|
+| `list_datasets` | Discover datasets in configured directory |
+| `load_dataset` | Load and preview dataset metadata |
+| `analyze_stress_profile` | Profile dataset stress factors |
+| `rank_models_hybrid` | Get recommendations (rule + LLM) |
+| `rank_models_rule` | Rule-based recommendations only |
+| `rank_models_llm` | LLM-based recommendations only |
+| `benchmark_compare` | Compare synthetic vs original data quality |
+| `get_model_info` | Model capabilities and constraints |
+| `check_model_constraints` | Validate model compatibility |
+| `explain_recommendation_reasoning` | Explain why a model was recommended |
+
+Test MCP protocol:
+```bash
+echo '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":1}' | python -m mcp_server.server
+```
+
+## Python API Usage
+
+```python
+from synthony import StochasticDataAnalyzer
+from synthony.recommender.engine import ModelRecommendationEngine
+
+# Profile dataset
+analyzer = StochasticDataAnalyzer()
+profile = analyzer.analyze("data.csv")
+
+# Check stress factors
+print(f"Severe Skew: {profile.stress_factors.severe_skew}")
+print(f"High Cardinality: {profile.stress_factors.high_cardinality}")
+
+# Get recommendation
+engine = ModelRecommendationEngine()
+result = engine.recommend(profile, method="rule_based")
+print(f"Recommended: {result.recommended_model.model_name}")
+
+# With intent-conditioned scale factors
+result = engine.recommend(profile, method="rule_based", focus="privacy")
+result = engine.recommend(profile, method="rule_based", focus="fidelity")
+
+# With constraints
+result = engine.recommend(
+    profile,
+    method="rule_based",
+    constraints={"cpu_only": True, "strict_dp": True},
+)
+```
+
+## Entry Points
+
+Defined in `pyproject.toml`:
+
+| Command | Source | Purpose |
+|---------|--------|---------|
+| `synthony-profile` | `synthony.cli:profile_command` | Profile dataset stress factors |
+| `synthony-benchmark` | `synthony.cli:benchmark_command` | Compare original vs synthetic |
+| `synthony-recommender` | `synthony.cli:recommender_command` | Get model recommendations |
+| `synthony-api` | `synthony.api.server:main` | Start FastAPI REST server |
+| `synthony-mcp` | `mcp_server.server:main` | Start MCP server |

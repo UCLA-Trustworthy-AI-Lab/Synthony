@@ -5,20 +5,35 @@ Ensures that known datasets always produce consistent recommendations.
 """
 
 import io
-import pytest
-import pandas as pd
+
 import numpy as np
-from scipy.stats import lognorm
+import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
+from scipy.stats import lognorm
 
 from synthony.api.server import app
 from synthony.benchmark.generators import BenchmarkDatasetGenerator
+from synthony.recommender.engine import ModelRecommendationEngine
+
+# Derive model sets from registry (not hardcoded)
+_engine = ModelRecommendationEngine()
+_DP_THRESHOLD = _engine.config.dp_min_score
+DP_MODELS = {
+    name for name, info in _engine.models.items()
+    if info["capabilities"]["privacy_dp"] >= _DP_THRESHOLD
+}
+GPU_MODELS = {
+    name for name, info in _engine.models.items()
+    if not info["constraints"].get("cpu_only_compatible", True)
+}
 
 
 @pytest.fixture
 def client():
-    """Create test client for API."""
-    return TestClient(app)
+    """Create test client for API with startup events triggered."""
+    with TestClient(app) as client:
+        yield client
 
 
 # Baseline expectations for benchmark datasets
@@ -28,7 +43,12 @@ BASELINE_EXPECTATIONS = {
             "severe_skew": True,
             "small_data": False,
         },
-        "expected_models": ["GReaT", "TabDDPM", "TabSyn", "AutoDiff", "TabTree"],
+        # v7 no-exclude: All models eligible. GPU tie-breaking prefers
+        # GReaT/TabDDPM/TabSyn/AutoDiff; CPU fallback CART/SMOTE/BN/ARF/NFlow.
+        "expected_models": [
+            "GReaT", "TabDDPM", "TabSyn", "AutoDiff", "TVAE",
+            "CART", "SMOTE", "BayesianNetwork", "ARF", "NFlow", "AIM",
+        ],
         "min_confidence": 0.7,
     },
     "needle_haystack": {
@@ -36,14 +56,19 @@ BASELINE_EXPECTATIONS = {
             "zipfian_distribution": True,
             "high_cardinality": True,
         },
-        "expected_models": ["GReaT", "TabSyn", "TabTree", "ARF"],
+        # v7 no-exclude: GPU models now eligible alongside CPU performers
+        "expected_models": [
+            "GReaT", "TabDDPM", "TabSyn", "AutoDiff",
+            "ARF", "CART", "SMOTE", "BayesianNetwork",
+        ],
         "min_confidence": 0.7,
     },
     "small_data": {
         "stress_factors": {
             "small_data": True,
         },
-        "expected_models": ["ARF", "GaussianCopula"],
+        # Small data tie-breaking still prefers ARF/CART/BN/SMOTE
+        "expected_models": ["ARF", "CART", "SMOTE", "BayesianNetwork", "NFlow", "GReaT"],
         "min_confidence": 0.8,
     },
 }
@@ -66,7 +91,6 @@ class TestBenchmarkBaselineRecommendations:
             params={
                 "dataset_id": "baseline_long_tail",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 5,
             },
             files={"file": ("long_tail.csv", csv_buffer, "text/csv")},
@@ -110,7 +134,6 @@ class TestBenchmarkBaselineRecommendations:
             params={
                 "dataset_id": "baseline_needle",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 5,
             },
             files={"file": ("needle.csv", csv_buffer, "text/csv")},
@@ -145,7 +168,6 @@ class TestBenchmarkBaselineRecommendations:
             params={
                 "dataset_id": "baseline_small",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 5,
             },
             files={"file": ("small.csv", csv_buffer, "text/csv")},
@@ -207,7 +229,6 @@ class TestKnownDatasetConsistency:
                 params={
                     "dataset_id": f"titanic_run_{i}",
                     "method": "rule_based",
-                    "cpu_only": False,
                     "top_n": 3,
                 },
                 files={"file": ("titanic.csv", csv_buffer, "text/csv")},
@@ -285,15 +306,13 @@ class TestConstraintConsistency:
             data = response.json()
 
             # GPU models should NEVER be recommended with cpu_only=True
-            gpu_models = {"TabDDPM", "TabSyn", "GReaT"}
-
             rec_model = data["recommendation"]["recommended_model"]["model_name"]
-            assert rec_model not in gpu_models
+            assert rec_model not in GPU_MODELS
 
             # Check alternatives
             if "alternative_models" in data["recommendation"]:
                 for alt in data["recommendation"]["alternative_models"]:
-                    assert alt["model_name"] not in gpu_models
+                    assert alt["model_name"] not in GPU_MODELS
 
     def test_dp_constraint_consistency(self, client, test_data):
         """DP constraint should consistently include only DP models."""
@@ -317,16 +336,15 @@ class TestConstraintConsistency:
             assert response.status_code == 200
             data = response.json()
 
-            # Only DP models should be recommended
-            dp_models = {"PATE-CTGAN", "AIM", "DPCART"}
-
+            # Only DP models should be recommended (derived from registry)
             rec_model = data["recommendation"]["recommended_model"]["model_name"]
-            assert rec_model in dp_models
+            assert rec_model in DP_MODELS
 
             # Check alternatives
             if "alternative_models" in data["recommendation"]:
                 for alt in data["recommendation"]["alternative_models"]:
-                    assert alt["model_name"] in dp_models
+                    assert alt["model_name"] in DP_MODELS
+
 
 
 class TestConfidenceScoreRegression:
@@ -347,7 +365,6 @@ class TestConfidenceScoreRegression:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("clear_case.csv", csv_buffer, "text/csv")},
@@ -379,7 +396,6 @@ class TestConfidenceScoreRegression:
                 params={
                     "dataset_id": f"confidence_test_{idx}",
                     "method": "rule_based",
-                    "cpu_only": False,
                     "top_n": 5,
                 },
                 files={"file": ("test.csv", csv_buffer, "text/csv")},

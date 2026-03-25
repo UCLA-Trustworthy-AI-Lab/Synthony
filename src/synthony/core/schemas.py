@@ -23,7 +23,6 @@ class SkewnessMetrics(BaseModel):
         default_factory=list, description="Columns with |skewness| > threshold (default 2.0)"
     )
 
-    # model_config = {"json_schema_extra": {"example": {"column_scores": {"age": 3.2, "income": 4.1}, "max_skewness": 4.1, "severe_columns": ["income"]}}}
 
 
 class CardinalityMetrics(BaseModel):
@@ -37,7 +36,6 @@ class CardinalityMetrics(BaseModel):
         default_factory=list, description="Columns with unique count > threshold (default 500)"
     )
 
-    # model_config = {"json_schema_extra": {"example": {"column_counts": {"user_id": 10000, "category": 50}, "max_cardinality": 10000, "high_cardinality_columns": ["user_id"]}}}
 
 
 class ZipfianMetrics(BaseModel):
@@ -52,7 +50,6 @@ class ZipfianMetrics(BaseModel):
         default_factory=list, description="Categorical columns exhibiting Zipfian behavior"
     )
 
-    # model_config = {"json_schema_extra": {"example": {"detected": True, "top_20_percent_ratio": 0.92, "affected_columns": ["category"]}}}
 
 
 class CorrelationMetrics(BaseModel):
@@ -89,13 +86,12 @@ class StressFactors(BaseModel):
     zipfian_distribution: bool = Field(
         description="Top 20% of categories contain >80% of data (power-law distribution)"
     )
-    small_data: bool = Field(description="Row count < 500 (overfitting risk)")
+    small_data: bool = Field(description="Row count < 1,000 (overfitting risk)")
     large_data: bool = Field(description="Row count > 50,000 (LLM context limitations)")
     higher_order_correlation: bool = Field(
         description="Dense correlation matrix with low linear R² (non-linear relationships)"
     )
 
-    # model_config = {"json_schema_extra": {"example": {"severe_skew": True, "high_cardinality": False, "zipfian_distribution": True, "small_data": False, "large_data": False, "higher_order_correlation": False}}}
 
 
 class DatasetProfile(BaseModel):
@@ -176,7 +172,8 @@ class DatasetProfile(BaseModel):
 
     def to_json(self) -> str:
         """Serialize profile to JSON string."""
-        return self.model_dump_json(indent=2)
+        # Exclude correlation_matrix as it contains a pandas DataFrame
+        return self.model_dump_json(indent=2, exclude={"correlation": {"correlation_matrix"}})
 
     @classmethod
     def from_json(cls, json_str: str) -> "DatasetProfile":
@@ -189,6 +186,12 @@ class RecommendationConstraints(BaseModel):
     
     Defines hardware, privacy, and performance requirements that filter
     the available model pool before scoring.
+    
+    Scale Factors (SF):
+    - SF = 1.0 (default) means no scaling (standard importance)
+    - SF > 1.0 means "this capability is MORE important" (amplifies score)
+    - SF < 1.0 (but > 0) means "this capability is LESS important" (reduces score)
+    - SF = 0.0 means "ignore this capability entirely" (zero weight)
     """
     
     cpu_only: bool = Field(default=False, description="Require CPU-only models (no GPU dependency)")
@@ -196,13 +199,27 @@ class RecommendationConstraints(BaseModel):
     prefer_speed: bool = Field(default=False, description="Prioritize training speed over quality")
     dataset_rows: Optional[int] = Field(default=None, description="Number of rows in dataset (for size filtering)")
     
+    # Scale Factors for Capability Scores (default 1.0 = no scaling)
+    skew_sf: float = Field(default=1.0, ge=0.0, le=10.0, description="Scale factor for Skewness capability score")
+    cardinality_sf: float = Field(default=1.0, ge=0.0, le=10.0, description="Scale factor for Cardinality capability score")
+    zipfian_sf: float = Field(default=1.0, ge=0.0, le=10.0, description="Scale factor for Zipfian capability score")
+    small_data_sf: float = Field(default=1.0, ge=0.0, le=10.0, description="Scale factor for Small Data capability score")
+    correlation_sf: float = Field(default=1.0, ge=0.0, le=10.0, description="Scale factor for Correlation capability score")
+    privacy_dp_sf: float = Field(default=1.0, ge=0.0, le=10.0, description="Scale factor for Privacy/Differential Privacy capability score")
+    
     model_config = {
         "json_schema_extra": {
             "example": {
                 "cpu_only": True,
                 "strict_dp": False,
                 "prefer_speed": False,
-                "dataset_rows": 10000
+                "dataset_rows": 10000,
+                "skew_sf": 1.0,
+                "cardinality_sf": 1.0,
+                "zipfian_sf": 1.0,
+                "small_data_sf": 1.0,
+                "correlation_sf": 1.0,
+                "privacy_dp_sf": 1.0
             }
         }
     }
@@ -254,7 +271,7 @@ class ColumnDifficultyScore(BaseModel):
     - Score 0-1: Trivial (any model)
     - Score 2: Moderate (most models except basic GANs)
     - Score 3: Hard (requires specialized models)
-    - Score 4: Very Hard (requires advanced models like GReaT, TabTree)
+    - Score 4: Very Hard (requires advanced models like GReaT, TabSyn)
     """
 
     overall_difficulty: int = Field(

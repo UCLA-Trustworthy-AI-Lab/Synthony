@@ -45,6 +45,14 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.5.0",
 ]
+test = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.23.0",
+    "requests>=2.31.0",
+    "mcp>=0.9.0",
+    "openai>=1.10.0",
+]
 polars = [
     "polars>=0.19.0",
 ]
@@ -81,18 +89,20 @@ all = [
 [project.scripts]
 synthony-profile = "synthony.cli:profile_command"
 synthony-benchmark = "synthony.cli:benchmark_command"
+synthony-recommender = "synthony.cli:recommender_command"
 synthony-api = "synthony.api.server:main"
 synthony-mcp = "mcp_server.server:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["synthony*", "mcp_server*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-addopts = "-v --cov=synthony --cov-report=term-missing"
+addopts = "-v --cov=synthony --cov-report=term-missing --cov-fail-under=70"
 
 [tool.black]
 line-length = 100
@@ -101,6 +111,8 @@ target-version = ['py310']
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP"]
 
 [tool.mypy]

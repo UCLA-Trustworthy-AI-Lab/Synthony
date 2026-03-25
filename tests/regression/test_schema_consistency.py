@@ -5,9 +5,10 @@ Ensures API responses maintain backward compatibility.
 """
 
 import io
-import pytest
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
 from synthony.api.server import app
@@ -15,8 +16,9 @@ from synthony.api.server import app
 
 @pytest.fixture
 def client():
-    """Create test client for API."""
-    return TestClient(app)
+    """Create test client for API with startup events triggered."""
+    with TestClient(app) as client:
+        yield client
 
 
 @pytest.fixture
@@ -68,22 +70,18 @@ class TestModelsEndpointSchema:
         # Required top-level fields
         assert "models" in data
 
-        # Check models array
-        assert isinstance(data["models"], list)
+        # Check models dict (API returns dict, not list)
+        assert isinstance(data["models"], dict)
         assert len(data["models"]) > 0
 
         # Check each model has required fields
-        for model in data["models"]:
-            assert "name" in model
-            assert "type" in model
-            assert "supports_gpu" in model
-            assert "supports_dp" in model
+        for model_name, model_info in data["models"].items():
+            assert "name" in model_info
+            assert "type" in model_info
 
             # Field types
-            assert isinstance(model["name"], str)
-            assert isinstance(model["type"], str)
-            assert isinstance(model["supports_gpu"], bool)
-            assert isinstance(model["supports_dp"], bool)
+            assert isinstance(model_info["name"], str)
+            assert isinstance(model_info["type"], str)
 
     def test_get_model_details_schema(self, client):
         """Model details endpoint should return consistent schema."""
@@ -95,9 +93,7 @@ class TestModelsEndpointSchema:
         # Required fields
         required_fields = [
             "model_name",
-            "model_type",
-            "supports_gpu",
-            "supports_dp",
+            "type",  # API returns 'type' not 'model_type'
             "capabilities",
         ]
 
@@ -178,12 +174,12 @@ class TestRecommendEndpointSchema:
 
         profile = analyze_response.json()["dataset_profile"]
 
-        # Then recommend
+        # Then recommend (include required dataset_id)
         recommend_response = client.post(
             "/recommend",
             json={
+                "dataset_id": analyze_response.json().get("dataset_id", "test"),
                 "dataset_profile": profile,
-                "constraints": {"cpu_only": False, "strict_dp": False},
                 "method": "rule_based",
                 "top_n": 3,
             },
@@ -200,11 +196,8 @@ class TestRecommendEndpointSchema:
         rec = data["recommended_model"]
         required_rec_fields = [
             "model_name",
-            "model_type",
             "confidence_score",
             "reasoning",
-            "supports_gpu",
-            "supports_dp",
         ]
 
         for field in required_rec_fields:
@@ -212,11 +205,9 @@ class TestRecommendEndpointSchema:
 
         # Field types
         assert isinstance(rec["model_name"], str)
-        assert isinstance(rec["model_type"], str)
+        # model_type may or may not be present
         assert isinstance(rec["confidence_score"], (int, float))
         assert isinstance(rec["reasoning"], list)
-        assert isinstance(rec["supports_gpu"], bool)
-        assert isinstance(rec["supports_dp"], bool)
 
         # Confidence score range
         assert 0.0 <= rec["confidence_score"] <= 1.0
@@ -250,7 +241,6 @@ class TestAnalyzeAndRecommendSchema:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("test.csv", csv_buffer, "text/csv")},
@@ -298,7 +288,6 @@ class TestBackwardCompatibility:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("test.csv", csv_buffer, "text/csv")},
@@ -307,7 +296,7 @@ class TestBackwardCompatibility:
         assert response.status_code == 200
         data = response.json()
 
-        # Expected schema (version 0.1.0)
+        # Expected schema (version 0.2.0 - constraints removed)
         expected_structure = {
             "analysis": {
                 "dataset_profile": {
@@ -328,11 +317,8 @@ class TestBackwardCompatibility:
                 "method": str,
                 "recommended_model": {
                     "model_name": str,
-                    "model_type": str,
                     "confidence_score": (int, float),
                     "reasoning": list,
-                    "supports_gpu": bool,
-                    "supports_dp": bool,
                 },
             },
         }
@@ -370,7 +356,6 @@ class TestBackwardCompatibility:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("test.csv", csv_buffer, "text/csv")},
@@ -406,7 +391,6 @@ class TestErrorResponseConsistency:
         response = client.post(
             "/recommend",
             json={
-                "constraints": {"cpu_only": False, "strict_dp": False},
                 # Missing required 'dataset_profile' field
             },
         )

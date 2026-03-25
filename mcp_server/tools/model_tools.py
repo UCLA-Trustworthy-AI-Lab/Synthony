@@ -17,7 +17,7 @@ class ModelTools:
     Model tools for querying model capabilities and constraints.
 
     Tools:
-    - check_model_constraints: Validate constraints (cpu_only, strict_dp, data size limits)
+    - check_model_constraints: Validate data size limits for models
     - get_model_info: Get detailed information about a specific model
     - list_models: List all available models with optional filters
     """
@@ -40,39 +40,17 @@ class ModelTools:
             Tool(
                 name="check_model_constraints",
                 description=(
-                    "Check which models satisfy given constraints. "
-                    "Applies hard filters based on: "
-                    "- cpu_only: Exclude GPU-dependent models (TabDDPM, TabSyn, GReaT) "
-                    "- strict_dp: Keep only differential privacy models (PATE-CTGAN, DPCART, AIM) "
-                    "- data_size: Filter based on row count limits "
+                    "Check which models are compatible with a given dataset size. "
+                    "Applies row-count filters based on model min/max data size limits. "
                     "Returns list of compatible models and reasons for exclusions."
                 ),
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "cpu_only": {
-                            "type": "boolean",
-                            "description": "Only include CPU-compatible models (excludes GPU models)",
-                            "default": False
-                        },
-                        "strict_dp": {
-                            "type": "boolean",
-                            "description": "Only include models with strict differential privacy",
-                            "default": False
-                        },
                         "row_count": {
                             "type": "integer",
                             "description": "Number of rows in dataset (for size-based filtering)",
                             "minimum": 1
-                        },
-                        "min_data_size": {
-                            "type": "integer",
-                            "description": "Minimum data size supported by model",
-                            "minimum": 1
-                        },
-                        "max_data_size": {
-                            "type": "integer",
-                            "description": "Maximum data size supported by model"
                         }
                     }
                 }
@@ -103,10 +81,7 @@ class ModelTools:
                 name="list_models",
                 description=(
                     "List all available synthesis models with optional filtering. "
-                    "Supports filtering by: "
-                    "- model_type: GAN, VAE, Diffusion, Tree-based, Statistical, LLM "
-                    "- cpu_only: CPU-compatible models only "
-                    "- requires_dp: Differential privacy support "
+                    "Supports filtering by model_type: GAN, VAE, Diffusion, Tree-based, Statistical, LLM. "
                     "Returns model registry with capability scores and rankings."
                 ),
                 inputSchema={
@@ -116,14 +91,6 @@ class ModelTools:
                             "type": "string",
                             "description": "Filter by model type",
                             "enum": ["GAN", "VAE", "Diffusion", "Tree-based", "Statistical", "LLM"]
-                        },
-                        "cpu_only": {
-                            "type": "boolean",
-                            "description": "Only include CPU-compatible models"
-                        },
-                        "requires_dp": {
-                            "type": "boolean",
-                            "description": "Only include models with differential privacy support"
                         }
                     }
                 }
@@ -143,29 +110,21 @@ class ModelTools:
 
     async def _check_model_constraints(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Check model constraints.
+        Check model compatibility based on row count.
 
         Args:
             arguments: {
-                "cpu_only": Optional[bool],
-                "strict_dp": Optional[bool],
-                "row_count": Optional[int],
-                "min_data_size": Optional[int],
-                "max_data_size": Optional[int]
+                "row_count": Optional[int]
             }
 
         Returns:
             {
                 "compatible_models": List[str],
                 "excluded_models": Dict[str, str],
-                "constraints_applied": Dict[str, Any]
+                "filters_applied": Dict[str, Any]
             }
         """
-        cpu_only = arguments.get("cpu_only", False)
-        strict_dp = arguments.get("strict_dp", False)
         row_count = arguments.get("row_count")
-        min_data_size = arguments.get("min_data_size")
-        max_data_size = arguments.get("max_data_size")
 
         models = self.recommender.model_capabilities.get("models", {})
         compatible_models = []
@@ -173,17 +132,6 @@ class ModelTools:
 
         for model_name, model_info in models.items():
             constraints = model_info.get("constraints", {})
-            capabilities = model_info.get("capabilities", {})
-
-            # Check CPU-only constraint
-            if cpu_only and not constraints.get("cpu_only_compatible", False):
-                excluded_models[model_name] = "Requires GPU"
-                continue
-
-            # Check strict DP constraint
-            if strict_dp and capabilities.get("privacy_dp", 0) < 3:
-                excluded_models[model_name] = "Does not support strict differential privacy"
-                continue
 
             # Check data size constraints
             if row_count:
@@ -203,12 +151,8 @@ class ModelTools:
         return {
             "compatible_models": compatible_models,
             "excluded_models": excluded_models,
-            "constraints_applied": {
-                "cpu_only": cpu_only,
-                "strict_dp": strict_dp,
-                "row_count": row_count,
-                "min_data_size": min_data_size,
-                "max_data_size": max_data_size
+            "filters_applied": {
+                "row_count": row_count
             }
         }
 
@@ -252,9 +196,7 @@ class ModelTools:
 
         Args:
             arguments: {
-                "model_type": Optional[str],
-                "cpu_only": Optional[bool],
-                "requires_dp": Optional[bool]
+                "model_type": Optional[str]
             }
 
         Returns:
@@ -266,8 +208,6 @@ class ModelTools:
             }
         """
         model_type = arguments.get("model_type")
-        cpu_only = arguments.get("cpu_only")
-        requires_dp = arguments.get("requires_dp")
 
         models = self.recommender.model_capabilities.get("models", {})
         filtered_models = {}
@@ -275,14 +215,6 @@ class ModelTools:
         for name, info in models.items():
             # Type filter
             if model_type and info.get("type", "").lower() != model_type.lower():
-                continue
-
-            # CPU-only filter
-            if cpu_only and not info.get("constraints", {}).get("cpu_only_compatible", False):
-                continue
-
-            # Differential privacy filter
-            if requires_dp and info.get("capabilities", {}).get("privacy_dp", 0) == 0:
                 continue
 
             filtered_models[name] = info

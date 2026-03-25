@@ -5,17 +5,21 @@ Tests the complete workflow from file loading through analysis to JSON output.
 """
 
 import json
-from pathlib import Path
 
 import pandas as pd
-import pytest
 
+from pathlib import Path
 from synthony import StochasticDataAnalyzer
 from synthony.benchmark.generators import BenchmarkDatasetGenerator
 
 
 class TestFullPipeline:
     """Test complete analysis pipeline."""
+
+    # pytest will NOT collect tests from classes that define an __init__.
+    # Define `test_data_path` as a class attribute instead so methods can access it.
+    test_data_path = Path('../data')
+
 
     def test_csv_to_profile_to_json(self, tmp_path):
         """Full pipeline: CSV → Analysis → JSON output."""
@@ -57,6 +61,52 @@ class TestFullPipeline:
             assert "stress_factors" in data
             assert "dataset_id" in data
 
+
+    def test_titanic_sample_csv_to_profile_to_json(self, temp_parquet_file):
+        """Full pipeline: CSV → Analysis → JSON output."""
+        if temp_parquet_file is None:
+            temp_parquet_file = self.test_data_path / 'titanic_sample.csv'
+
+        # Analyze
+        analyzer = StochasticDataAnalyzer()
+        profile = analyzer.analyze_from_file(temp_parquet_file)
+
+        # Validate basic structure
+        assert isinstance(profile.dataset_id, str)
+        assert len(profile.dataset_id) > 0
+
+        # Check stress factors exist
+        assert hasattr(profile, "stress_factors")
+        assert hasattr(profile.stress_factors, "severe_skew")
+        assert hasattr(profile.stress_factors, "small_data")
+
+        # Export JSON
+        json_path = self.test_data_path / "titatic_profile.json"
+
+        analyzer.to_json(profile, json_path)
+
+        assert json_path.exists()
+
+        # Validate JSON can be loaded and parsed
+        with open(json_path) as f:
+            data = json.load(f)
+            assert data["row_count"] == 1000
+            assert data["column_count"] == 3
+            assert "stress_factors" in data
+            assert "dataset_id" in data
+
+    def test_titanic_parquet_loading(self, temp_parquet_file):
+        """Test loading and analyzing Parquet files."""
+
+        if temp_parquet_file is None:
+            temp_parquet_file = self.test_data_path / 'titanic_sample.parquet'
+
+        analyzer = StochasticDataAnalyzer()
+        profile = analyzer.analyze_from_file(temp_parquet_file)
+
+        assert profile.row_count == 1000
+        assert profile.column_count == 3
+
     def test_dataframe_analysis(self, sample_normal_df):
         """Analyze DataFrame directly without file I/O."""
         analyzer = StochasticDataAnalyzer()
@@ -67,13 +117,7 @@ class TestFullPipeline:
         assert profile.stress_factors.small_data is False  # 1000 rows > 500 threshold
         assert profile.stress_factors.large_data is False  # 1000 rows < 50k threshold
 
-    def test_parquet_loading(self, temp_parquet_file):
-        """Test loading and analyzing Parquet files."""
-        analyzer = StochasticDataAnalyzer()
-        profile = analyzer.analyze_from_file(temp_parquet_file)
 
-        assert profile.row_count == 1000
-        assert profile.column_count == 3
 
     def test_json_serialization_roundtrip(self, sample_normal_df):
         """Test JSON serialization and deserialization."""

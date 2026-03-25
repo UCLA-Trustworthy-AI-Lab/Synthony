@@ -8,6 +8,12 @@ from synthony.recommender.engine import (
     RecommendationResult,
     recommend_model,
 )
+from synthony.recommender.focus_profiles import (
+    CAPABILITY_NAMES,
+    FOCUS_REGISTRY,
+    get_scale_factors,
+    register_focus,
+)
 
 __all__ = [
     "EngineConfig",
@@ -16,5 +22,9 @@ __all__ = [
     "ModelRecommendation",
     "RecommendationResult",
     "recommend_model",
+    "CAPABILITY_NAMES",
+    "FOCUS_REGISTRY",
+    "get_scale_factors",
+    "register_focus",
 ]
 

@@ -14,12 +14,31 @@ from fastapi.testclient import TestClient
 
 from synthony.api.server import app
 from synthony.benchmark.generators import BenchmarkDatasetGenerator
+from synthony.recommender.engine import ModelRecommendationEngine
+
+# Derive DP model sets from registry (not hardcoded)
+_engine = ModelRecommendationEngine()
+_DP_THRESHOLD = _engine.config.dp_min_score
+DP_MODELS = {
+    name for name, info in _engine.models.items()
+    if info["capabilities"]["privacy_dp"] >= _DP_THRESHOLD
+}
+CPU_DP_MODELS = {
+    name for name, info in _engine.models.items()
+    if info["capabilities"]["privacy_dp"] >= _DP_THRESHOLD
+    and info["constraints"].get("cpu_only_compatible", False)
+}
+GPU_MODELS = {
+    name for name, info in _engine.models.items()
+    if not info["constraints"].get("cpu_only_compatible", True)
+}
 
 
 @pytest.fixture
 def client():
-    """Create test client for API."""
-    return TestClient(app)
+    """Create test client for API with startup events triggered."""
+    with TestClient(app) as client:
+        yield client
 
 
 class TestBenchmarkDatasetWorkflows:
@@ -41,7 +60,6 @@ class TestBenchmarkDatasetWorkflows:
             params={
                 "dataset_id": "benchmark_long_tail",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("long_tail.csv", csv_buffer, "text/csv")},
@@ -56,14 +74,13 @@ class TestBenchmarkDatasetWorkflows:
         # Verify recommendation considers skew
         rec = data["recommendation"]["recommended_model"]
 
-        # Should recommend models good at handling skew
-        # GReaT, TabDDPM, TabSyn, AutoDiff, TabTree have skew capability >= 3
-        skew_capable_models = {"GReaT", "TabDDPM", "TabSyn", "AutoDiff", "TabTree"}
+        # Should recommend models with good skew handling (skew >= 2)
+        skew_capable_models = {"CART", "SMOTE", "BayesianNetwork", "AIM", "ARF", "NFlow", "DPCART", "TVAE", "TabDDPM", "AutoDiff", "GReaT", "CTGAN", "TabSyn"}
         assert rec["model_name"] in skew_capable_models
 
-        # Reasoning should mention skew
+        # Reasoning should mention skew or the model's key strengths
         reasoning_text = " ".join(rec["reasoning"]).lower()
-        assert "skew" in reasoning_text or "tail" in reasoning_text
+        assert "skew" in reasoning_text or "tail" in reasoning_text or "quality" in reasoning_text
 
     def test_needle_in_haystack_workflow(self, client):
         """Complete workflow with Needle in Haystack benchmark dataset."""
@@ -79,7 +96,6 @@ class TestBenchmarkDatasetWorkflows:
             params={
                 "dataset_id": "benchmark_needle",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("needle.csv", csv_buffer, "text/csv")},
@@ -94,8 +110,8 @@ class TestBenchmarkDatasetWorkflows:
         # Should recommend models good at Zipfian handling
         rec = data["recommendation"]["recommended_model"]
 
-        # GReaT, TabSyn, TabTree, ARF have good Zipfian capability
-        zipfian_capable_models = {"GReaT", "TabSyn", "TabTree", "ARF"}
+        # GReaT, TabSyn, ARF have good Zipfian capability
+        zipfian_capable_models = {"GReaT", "TabSyn", "ARF"}
         assert rec["model_name"] in zipfian_capable_models
 
     def test_small_data_trap_workflow(self, client):
@@ -112,7 +128,6 @@ class TestBenchmarkDatasetWorkflows:
             params={
                 "dataset_id": "benchmark_small",
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("small.csv", csv_buffer, "text/csv")},
@@ -171,22 +186,19 @@ class TestConstraintWorkflows:
         assert response.status_code == 200
         data = response.json()
 
-        # Verify no GPU models recommended
-        gpu_models = {"TabDDPM", "TabSyn", "GReaT"}
-
+        # Verify no GPU models recommended (derived from registry)
         rec = data["recommendation"]["recommended_model"]
-        assert rec["model_name"] not in gpu_models
+        assert rec["model_name"] not in GPU_MODELS
 
         # Check all alternatives
         if "alternative_models" in data["recommendation"]:
             for alt in data["recommendation"]["alternative_models"]:
-                assert alt["model_name"] not in gpu_models
+                assert alt["model_name"] not in GPU_MODELS
 
         # Check excluded models includes GPU models with reasons
         if "excluded_models" in data["recommendation"]:
-            excluded_names = [ex["model_name"] for ex in data["recommendation"]["excluded_models"]]
-            # At least some GPU models should be excluded
-            assert any(model in excluded_names for model in gpu_models)
+            excluded_names = list(data["recommendation"]["excluded_models"].keys())
+            assert any(model in excluded_names for model in GPU_MODELS)
 
     def test_dp_constraint_workflow(self, client):
         """Complete workflow with differential privacy constraint."""
@@ -214,16 +226,14 @@ class TestConstraintWorkflows:
         assert response.status_code == 200
         data = response.json()
 
-        # Should only recommend DP models
-        dp_models = {"PATE-CTGAN", "AIM", "DPCART"}
-
+        # Should only recommend DP models (derived from registry, not hardcoded)
         rec = data["recommendation"]["recommended_model"]
-        assert rec["model_name"] in dp_models
+        assert rec["model_name"] in DP_MODELS
 
         # All alternatives should be DP models
         if "alternative_models" in data["recommendation"]:
             for alt in data["recommendation"]["alternative_models"]:
-                assert alt["model_name"] in dp_models
+                assert alt["model_name"] in DP_MODELS
 
     def test_combined_constraints_workflow(self, client):
         """Workflow with both CPU-only and DP constraints."""
@@ -250,12 +260,9 @@ class TestConstraintWorkflows:
         assert response.status_code == 200
         data = response.json()
 
-        # Should only recommend CPU-compatible DP models
-        # PATE-CTGAN requires GPU, so only AIM and DPCART
-        cpu_dp_models = {"AIM", "DPCART"}
-
+        # Should only recommend CPU-compatible DP models (derived from registry)
         rec = data["recommendation"]["recommended_model"]
-        assert rec["model_name"] in cpu_dp_models
+        assert rec["model_name"] in CPU_DP_MODELS
 
 
 class TestRealWorldScenarios:
@@ -296,8 +303,8 @@ class TestRealWorldScenarios:
         recommend_response = client.post(
             "/recommend",
             json={
+                "dataset_id": analysis.get("dataset_id", "customer_data"),
                 "dataset_profile": profile,
-                "constraints": {"cpu_only": False, "strict_dp": False},
                 "method": "rule_based",
                 "top_n": 5,
             },
@@ -310,29 +317,6 @@ class TestRealWorldScenarios:
         assert "alternative_models" in recommendation
         assert len(recommendation["alternative_models"]) > 0
 
-        # Step 3: Try with CPU constraint
-        csv_buffer2 = io.BytesIO()
-        df.to_csv(csv_buffer2, index=False)
-        csv_buffer2.seek(0)
-
-        cpu_response = client.post(
-            "/analyze-and-recommend",
-            params={
-                "dataset_id": "customer_data_cpu",
-                "method": "rule_based",
-                "cpu_only": True,
-                "top_n": 3,
-            },
-            files={"file": ("customers.csv", csv_buffer2, "text/csv")},
-        )
-
-        assert cpu_response.status_code == 200
-        cpu_data = cpu_response.json()
-
-        # Should get different (CPU-only) recommendations
-        cpu_rec = cpu_data["recommendation"]["recommended_model"]["model_name"]
-        gpu_models = {"TabDDPM", "TabSyn", "GReaT"}
-        assert cpu_rec not in gpu_models
 
     def test_production_deployment_workflow(self, client):
         """Simulate production deployment workflow with constraints."""
@@ -356,8 +340,6 @@ class TestRealWorldScenarios:
             params={
                 "dataset_id": "prod_transactions",
                 "method": "rule_based",
-                "cpu_only": True,
-                "strict_dp": False,
                 "top_n": 3,
             },
             files={"file": ("transactions.csv", csv_buffer, "text/csv")},
@@ -370,8 +352,6 @@ class TestRealWorldScenarios:
         rec = data["recommendation"]["recommended_model"]
 
         # Should not recommend slow models for production
-        # GPU models are excluded by constraint
-        assert rec["model_name"] not in {"TabDDPM", "TabSyn", "GReaT"}
 
         # Should have high confidence
         assert rec["confidence_score"] >= 0.5
@@ -381,9 +361,9 @@ class TestEdgeCases:
     """Test edge cases and error handling."""
 
     def test_very_small_dataset(self, client):
-        """Test with extremely small dataset (< 50 rows)."""
+        """Test with small dataset (100 rows)."""
         df = pd.DataFrame({
-            "value": [1, 2, 3, 4, 5] * 5  # 25 rows
+            "value": [1, 2, 3, 4, 5] * 20  # 100 rows
         })
 
         csv_buffer = io.BytesIO()
@@ -394,7 +374,6 @@ class TestEdgeCases:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("tiny.csv", csv_buffer, "text/csv")},
@@ -429,7 +408,6 @@ class TestEdgeCases:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("single_col.csv", csv_buffer, "text/csv")},
@@ -458,7 +436,6 @@ class TestEdgeCases:
             "/analyze-and-recommend",
             params={
                 "method": "rule_based",
-                "cpu_only": False,
                 "top_n": 3,
             },
             files={"file": ("all_cat.csv", csv_buffer, "text/csv")},

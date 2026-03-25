@@ -4,7 +4,6 @@ Unit tests for DataSizeClassifier.
 Tests small data (<500 rows) and large data (>50k rows) detection.
 """
 
-import pytest
 
 from synthony.detectors.data_size import DataSizeClassifier
 

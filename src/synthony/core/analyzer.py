@@ -11,7 +11,7 @@ from synthony.detectors.correlation import CorrelationDetector
 from synthony.detectors.data_size import DataSizeClassifier
 from synthony.detectors.skewness import SkewnessDetector
 from synthony.utils.constants import AnalyzerConfig, DEFAULT_CONFIG
-from synthony.core.Errors import ValidationError, UnsupportedFormatError
+from synthony.core.errors import ValidationError, UnsupportedFormatError
 
 class StochasticDataAnalyzer:
     """
@@ -89,21 +89,15 @@ class StochasticDataAnalyzer:
             profile = analyzer.analyze("data.csv")
             profile = analyzer.analyze(Path("data.parquet"))
 
-            # From file with custom config
-            profile = analyzer.analyze("data.csv", config=AnalyzerConfig(
+            # With custom config (pass to constructor, not analyze())
+            analyzer = StochasticDataAnalyzer(config=AnalyzerConfig(
                 skewness_threshold=2.0,
                 cardinality_threshold=10,
                 zipfian_ratio=0.5,
-                correlation_density_threshold=0.5,
-                correlation_strength_threshold=0.5,
-                r2_threshold=0.5,
-                max_correlation_columns=10,
-                small_data_threshold=100,
-                large_data_threshold=1000,
+                small_data_threshold=500,
+                large_data_threshold=10000,
             ))
-
-            # For numpy array
-            profile = analyzer.analyze(np.array([[1, 2], [3, 4]]))
+            profile = analyzer.analyze("data.csv")
             ```
         """
         # Handle different input types
@@ -201,38 +195,8 @@ class StochasticDataAnalyzer:
         df = DataLoader.load(path, file_format=file_format, validate=True)
         return self.analyze(df)
 
-    # def to_json(
-    #     self, profile: DatasetProfile, path: Optional[Union[Path, str]] = None
-    # ) -> str:
-    #     """Serialize profile to JSON (optionally save to file).
-
-    #     Args:
-    #         profile: DatasetProfile to serialize
-    #         path: Optional file path to save JSON.
-    #              If None, returns JSON string without saving.
-
-    #     Returns:
-    #         JSON string representation of profile
-
-    #     Example:
-    #         ```python
-    #         # Get JSON string
-    #         json_str = analyzer.to_json(profile)
-
-    #         # Save to file
-    #         analyzer.to_json(profile, "profile.json")
-    #         ```
-    #     """
-    #     json_str = _json_formatter(profile)
-
-    #     if path is not None:
-    #         path = Path(path)
-    #         path.write_text(json_str)
-
-    #     return json_str
-
     @staticmethod
-    def from_json(self, json_str: str) -> DatasetProfile:
+    def from_json(json_str: str) -> DatasetProfile:
         """Deserialize profile from JSON string.
 
         Args:
@@ -251,50 +215,9 @@ class StochasticDataAnalyzer:
             profile = StochasticDataAnalyzer.from_json(json_content)
             ```
         """
-        return DatasetProfile.from_json(json_str)
+        return DatasetProfile.model_validate_json(json_str)
 
-    @staticmethod
-    def _json_formatter(self, profile: DatasetProfile) -> str:
-        """Format profile as JSON string."""
-        return{
-            "dataset_profile": {
-                "dataset_name": profile.dataset_name,
-                "dataset_type": profile.dataset_type,
-                "dataset_path": profile.dataset_path,
-                "n_rows": profile.row_count,
-                "n_columns": profile.column_count,
-                "column_types": {
-                    "numeric": profile.n_numeric_columns, 
-                    "categorical": profile.n_categorical_columns,
-                    "object": profile.n_object_columns,
-                    "other": profile.n_other_columns
-                },
-                "numeric_stats": {
-                    "max_skewness": profile.max_skewness, 
-                    "has_multimodal": profile.has_multimodal
-                },
-                "higher-order": {
-                    "max_order": profile.max_order, 
-                    "has_higher_order": profile.has_higher_order
-                },
-                "categorical_stats": {
-                    "max_cardinality": profile.max_cardinality, 
-                    "distribution_shape": profile.distribution_shape},
-                "correlation_stats": {
-                    "complexity": profile.correlation_complexity
-                }
-            },
-            "dataset_constraints": {
-                "privacy": profile.dp,
-                "accelerator": profile.accelerator,
-                "latency": profile.latency
-            },
-            "dataset_columnes":{
-                "dataset_columns": list(profile.dataset_columns)
-            }
-        }
-    @staticmethod
-    def to_json(self,profile: DatasetProfile, path: Optional[Union[Path, str]] = None) -> str:
+    def to_json(self, profile: DatasetProfile, path: Optional[Union[Path, str]] = None) -> str:
         """Serialize profile to JSON (optionally save to file).
 
         Args:
@@ -314,15 +237,13 @@ class StochasticDataAnalyzer:
             analyzer.to_json(profile, "profile.json")
             ```
         """
-        json_str = self._json_formatter(profile)
+        # Use the profile's built-in serialization which handles all types correctly
+        json_str = profile.model_dump_json(indent=2, exclude={"correlation": {"correlation_matrix"}})
 
-        if path is not None and os.path.exists(path):
+        if path is not None:
             path = Path(path)
+            path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json_str)
+
         return json_str
 
-class ColumnProfile:
-    def __init__(self, column_name: str, column_type: str, column_stats: dict):
-        self.column_name = column_name
-        self.column_type = column_type
-        self.column_stats = column_stats

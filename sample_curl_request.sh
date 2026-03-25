@@ -41,10 +41,10 @@ print(f\"Models: {', '.join(list(data['models'].keys())[:5])}...\")
 echo ""
 
 # Get model info
-echo -e "${YELLOW}3. Get Model Info (TabTree)${NC}"
-echo "curl $BASE_URL/models/TabTree"
+echo -e "${YELLOW}3. Get Model Info (ARF)${NC}"
+echo "curl $BASE_URL/models/ARF"
 echo ""
-curl -s "$BASE_URL/models/TabTree" | python3 -c "
+curl -s "$BASE_URL/models/ARF" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 print(f\"Model: {data['model_name']}\")

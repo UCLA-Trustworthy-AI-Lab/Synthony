@@ -12,7 +12,6 @@ Provides:
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -20,14 +19,15 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     create_engine,
-    Index,
 )
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker, Session as DBSession
+from sqlalchemy.orm import Session as DBSession
+from sqlalchemy.orm import relationship, sessionmaker
 
 Base = declarative_base()
 
@@ -204,7 +204,7 @@ def get_database_url() -> str:
     return os.getenv("DATABASE_URL", "sqlite:///./data/synthony.db")
 
 
-def init_database(database_url: Optional[str] = None):
+def init_database(database_url: str | None = None):
     """Initialize database and create tables."""
     global _engine, _SessionLocal
 
@@ -269,7 +269,7 @@ def create_session(ip_address: str, user_agent: str, retention_days: int = 30) -
         db.close()
 
 
-def get_session(session_id: str) -> Optional[Session]:
+def get_session(session_id: str) -> Session | None:
     """Retrieve session by ID."""
     db = get_db_session()
     try:
@@ -321,7 +321,7 @@ def create_analysis(
     dataset_id: str,
     profile_json: str,
     column_analysis_json: str,
-    recommendation_json: Optional[str] = None,
+    recommendation_json: str | None = None,
 ) -> Analysis:
     """Store analysis results."""
     db = get_db_session()
@@ -348,8 +348,8 @@ def log_audit(
     endpoint: str,
     ip_address: str,
     success: bool = True,
-    error_message: Optional[str] = None,
-    metadata: Optional[str] = None,
+    error_message: str | None = None,
+    metadata: str | None = None,
 ):
     """Write to audit log."""
     db = get_db_session()
@@ -388,26 +388,26 @@ def cleanup_expired_sessions():
 # ============================================================================
 
 
-def create_system_prompt(version: str, content: str, file_path: Optional[str] = None, set_active: bool = True) -> SystemPrompt:
+def create_system_prompt(version: str, content: str, file_path: str | None = None, set_active: bool = True) -> SystemPrompt:
     """Store new system prompt version.
-    
+
     Args:
         version: Version identifier (e.g., "v2.0", "2026-01-16")
         content: Prompt content
         file_path: Original file location
         set_active: Whether to set as active version
-        
+
     Returns:
         SystemPrompt instance
-        
+
     Raises:
         ValueError: If same version and hash already exists
     """
     import hashlib
-    
+
     # Calculate content hash
     content_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
-    
+
     db = get_db_session()
     try:
         # Check if version+hash already exists
@@ -415,17 +415,17 @@ def create_system_prompt(version: str, content: str, file_path: Optional[str] = 
             SystemPrompt.version == version,
             SystemPrompt.content_hash == content_hash
         ).first()
-        
+
         if existing:
             raise ValueError(
                 f"System prompt version '{version}' with identical content already exists "
                 f"(prompt_id: {existing.prompt_id}). No changes detected."
             )
-        
+
         # Deactivate all if setting as active
         if set_active:
             db.query(SystemPrompt).update({"is_active": False})
-        
+
         prompt = SystemPrompt(
             prompt_id=str(uuid4()),
             version=version,
@@ -442,11 +442,11 @@ def create_system_prompt(version: str, content: str, file_path: Optional[str] = 
         db.close()
 
 
-def get_active_prompt() -> Optional[SystemPrompt]:
+def get_active_prompt() -> SystemPrompt | None:
     """Get currently active system prompt."""
     db = get_db_session()
     try:
-        return db.query(SystemPrompt).filter(SystemPrompt.is_active == True).first()
+        return db.query(SystemPrompt).filter(SystemPrompt.is_active).first()
     finally:
         db.close()
 
@@ -457,7 +457,7 @@ def set_active_prompt(prompt_id: str):
     try:
         # Deactivate all
         db.query(SystemPrompt).update({"is_active": False})
-        
+
         # Activate specified
         prompt = db.query(SystemPrompt).filter(SystemPrompt.prompt_id == prompt_id).first()
         if prompt:
@@ -471,10 +471,10 @@ def set_active_prompt(prompt_id: str):
 
 def set_active_prompt_by_version(version: str):
     """Set a specific prompt version as active.
-    
+
     Args:
         version: Version identifier (e.g., "v2.0")
-        
+
     Returns:
         SystemPrompt instance if found, None otherwise
     """
@@ -484,10 +484,10 @@ def set_active_prompt_by_version(version: str):
         prompt = db.query(SystemPrompt).filter(SystemPrompt.version == version).first()
         if not prompt:
             return None
-        
+
         # Deactivate all
         db.query(SystemPrompt).update({"is_active": False})
-        
+
         # Activate specified version
         prompt.is_active = True
         db.commit()
@@ -506,7 +506,7 @@ def list_system_prompts():
         db.close()
 
 
-def get_dataset(dataset_id: str) -> Optional[Dataset]:
+def get_dataset(dataset_id: str) -> Dataset | None:
     """Retrieve dataset by ID."""
     db = get_db_session()
     try:
@@ -515,7 +515,7 @@ def get_dataset(dataset_id: str) -> Optional[Dataset]:
         db.close()
 
 
-def get_analysis_by_dataset(dataset_id: str) -> Optional[Analysis]:
+def get_analysis_by_dataset(dataset_id: str) -> Analysis | None:
     """Get most recent analysis for a dataset."""
     db = get_db_session()
     try:
@@ -529,10 +529,26 @@ def get_analysis_by_dataset(dataset_id: str) -> Optional[Analysis]:
         db.close()
 
 
-def get_analysis(analysis_id: str) -> Optional[Analysis]:
+def get_analysis(analysis_id: str) -> Analysis | None:
     """Retrieve analysis by analysis_id."""
     db = get_db_session()
     try:
         return db.query(Analysis).filter(Analysis.analysis_id == analysis_id).first()
     finally:
         db.close()
+
+
+def get_dataset_profile(profile_id: str) -> dict | None:
+    """Retrieve dataset profile JSON by profile_id (analysis_id).
+
+    Args:
+        profile_id: Analysis ID containing the dataset profile
+
+    Returns:
+        Dataset profile as dictionary, or None if not found
+    """
+    analysis = get_analysis(profile_id)
+    if analysis and analysis.profile_json:
+        import json
+        return json.loads(analysis.profile_json)
+    return None

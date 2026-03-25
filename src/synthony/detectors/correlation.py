@@ -97,9 +97,7 @@ class CorrelationDetector:
             )
 
         # Sample columns if too many (performance optimization)
-        sampled = False
         if numeric_df.shape[1] > self.max_columns:
-            sampled = True
             warnings.warn(
                 f"Sampling {self.max_columns} of {numeric_df.shape[1]} numeric columns for correlation analysis (performance optimization)"
             )
@@ -144,7 +142,7 @@ class CorrelationDetector:
 
                         # Need sufficient data for regression
                         if len(pair_df) > 10:
-                            X = pair_df["x"].values.reshape(-1, 1)
+                            X = pair_df["x"].values.reshape(-1, 1)  # noqa: N806 (ML convention)
                             y = pair_df["y"].values
 
                             # Fit linear regression

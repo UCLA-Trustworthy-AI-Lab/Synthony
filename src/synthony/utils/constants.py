@@ -9,8 +9,6 @@ All threshold values are based on empirical research and documented in:
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict
-
 
 # Data directory configuration
 # Override with SYNTHONY_DATA_DIR environment variable
@@ -36,8 +34,8 @@ class AnalyzerConfig:
     zipfian_ratio: float = 0.80
     """Top 20% categories > 80% of data indicates power-law distribution."""
 
-    small_data_threshold: int = 500
-    """< 500 rows risks overfitting without tree-based models."""
+    small_data_threshold: int = 1000
+    """< 1,000 rows risks overfitting without tree-based models."""
 
     large_data_threshold: int = 50000
     """> 50k rows makes LLM-based synthesis impractical."""
@@ -57,7 +55,7 @@ class AnalyzerConfig:
     """Sample if more than this many numeric columns (O(n²) complexity)."""
 
     @classmethod
-    def from_dict(cls, config: Dict[str, float]) -> "AnalyzerConfig":
+    def from_dict(cls, config: dict[str, float]) -> "AnalyzerConfig":
         """Create config from dictionary.
 
         Args:
@@ -68,7 +66,7 @@ class AnalyzerConfig:
         """
         return cls(**config)
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
         """Convert config to dictionary for JSON serialization."""
         return {
             "skewness_threshold": self.skewness_threshold,
@@ -91,7 +89,7 @@ THRESHOLD_DOCS = {
     "skewness_threshold": "Fisher-Pearson skewness > 2.0 indicates severe tail distribution that breaks basic GANs/VAEs",
     "cardinality_threshold": "Unique values > 500 risks mode collapse in generative models",
     "zipfian_ratio": "Top 20% categories > 80% of data indicates power-law distribution requiring specialized tokenization",
-    "small_data_threshold": "< 500 rows risks overfitting without tree-based models like ARF",
+    "small_data_threshold": "< 1,000 rows risks overfitting without tree-based models like ARF",
     "large_data_threshold": "> 50k rows makes LLM-based synthesis impractical due to context window limitations",
     "correlation_density_threshold": "Fraction of pairs with strong correlation to consider matrix 'dense'",
     "correlation_strength_threshold": "Minimum correlation strength to count as 'correlated'",

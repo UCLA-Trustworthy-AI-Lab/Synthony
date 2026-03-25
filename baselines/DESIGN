@@ -1,0 +1,8 @@
+\subsection{Baselines}
+We compare \textit{Synthony} against four selection strategies:
+\begin{enumerate}
+    \item \textbf{Static Heuristic (Rule-of-Thumb):} A logic-based baseline mimicking common practitioner choices (e.g., \textit{"If rows $< 10k$, use Gaussian Copula; else use CTGAN"}).
+    \item \textbf{Vanilla LLM Selector:} A GPT-4 based agent provided with the dataset schema and summary statistics, but lacking the \textit{Synthony} feedback loop and tuning tools. It makes a "zero-shot" recommendation.
+    \item \textbf{Random Search:} A lower-bound baseline that samples generators (and their hyperparameters) uniformly at random under the same trial budget; we report performance as a function of trials.
+    \item \textbf{Meta-feature kNN Selector.} A non-LLM meta-learning baseline that uses dataset meta-features (including stress profiles) to retrieve the $k$ most similar training datasets and recommends the synthesizer with best average oracle score among neighbors for the given intent.
+\end{enumerate}

@@ -7,6 +7,7 @@ Implements both:
 """
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -14,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field
 
 from synthony.core.schemas import ColumnAnalysisResult, DatasetProfile
+from synthony.recommender.focus_profiles import get_scale_factors
 
 
 @dataclass
@@ -38,11 +40,49 @@ class EngineConfig:
     
     # Speed preference
     prefer_speed_default: bool = False   # Default value for prefer_speed constraint
-    
-    # Hard Problem fallback priority (order matters)
+
+    # Empirical quality bonus weight (applied to spark avg_quality_score)
+    quality_weight: float = 0.3
+
+    # DP threshold: models with privacy_dp >= this value qualify under strict_dp.
+    # Default loaded from registry metadata.dp_threshold; fallback = 3 (score > 2).
+    dp_min_score: int = 3
+
+    # Required capability thresholds (loaded from registry metadata.capability_thresholds)
+    # Skew: if max_skewness >= skew_severe_boundary → require skew_high, else skew_moderate
+    skew_severe_boundary: float = 4.0
+    skew_high_required: int = 4
+    skew_moderate_required: int = 3
+    # Cardinality: if max_cardinality >= cardinality_severe_boundary → high, else moderate
+    cardinality_severe_boundary: int = 5000
+    cardinality_high_required: int = 4
+    cardinality_moderate_required: int = 3
+    # Zipfian: if top_20_percent_ratio >= zipfian_severe_ratio → high, else moderate
+    zipfian_severe_ratio: float = 0.9
+    zipfian_high_required: int = 4
+    zipfian_moderate_required: int = 3
+    # Small data and correlation required levels
+    small_data_required: int = 4
+    correlation_required: int = 3
+
+    # Hard Problem routing (loaded from registry hard_problem_routing)
+    hard_problem_primary: str = "GReaT"
+    hard_problem_large_data_fallback: str = "TabDDPM"
     hard_problem_fallback: List[str] = field(
-        default_factory=lambda: ["TabSyn", "ARF", "TabTree"]
+        default_factory=lambda: ["ARF", "TabSyn", "CART", "SMOTE", "BayesianNetwork"]
     )
+
+    # Hard Problem confidence scores (loaded from registry metadata.hard_problem_confidence)
+    hard_problem_confidence_primary: float = 0.95
+    hard_problem_confidence_fallback: float = 0.85
+    hard_problem_confidence_alternative: float = 0.70
+
+    # Score decay curve (loaded from registry metadata.score_decay)
+    # Applied in _score_models when model capability is below required level
+    score_decay_exact: float = 1.0       # model_score >= required
+    score_decay_near: float = 0.7        # model_score == required - 1
+    score_decay_moderate: float = 0.4    # model_score == required - 2
+    score_decay_poor: float = 0.0        # model_score < required - 2
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
@@ -54,6 +94,10 @@ class EngineConfig:
             "large_data_threshold": self.large_data_threshold,
             "tie_threshold_percent": self.tie_threshold_percent,
             "prefer_speed_default": self.prefer_speed_default,
+            "quality_weight": self.quality_weight,
+            "dp_min_score": self.dp_min_score,
+            "hard_problem_primary": self.hard_problem_primary,
+            "hard_problem_large_data_fallback": self.hard_problem_large_data_fallback,
             "hard_problem_fallback": self.hard_problem_fallback,
         }
 
@@ -170,6 +214,41 @@ class ModelRecommendationEngine:
             self.registry = json.load(f)
         self.models = self.registry["models"]
 
+        # Load data-driven config from registry metadata
+        registry_dp = self.registry.get("metadata", {}).get("dp_threshold")
+        if registry_dp is not None:
+            self.config.dp_min_score = int(registry_dp)
+
+        # Load capability thresholds from registry metadata
+        cap_thresholds = self.registry.get("metadata", {}).get("capability_thresholds", {})
+        for key, value in cap_thresholds.items():
+            if hasattr(self.config, key):
+                setattr(self.config, key, type(getattr(self.config, key))(value))
+
+        # Load hard problem routing from registry
+        hp_routing = self.registry.get("hard_problem_routing", {})
+        if hp_routing:
+            if "primary" in hp_routing:
+                self.config.hard_problem_primary = hp_routing["primary"]
+            if "large_data_fallback" in hp_routing:
+                self.config.hard_problem_large_data_fallback = hp_routing["large_data_fallback"]
+            if "fallback_priority" in hp_routing:
+                self.config.hard_problem_fallback = hp_routing["fallback_priority"]
+
+        # Load hard problem confidence scores from registry metadata
+        hp_conf = self.registry.get("metadata", {}).get("hard_problem_confidence", {})
+        for key, value in hp_conf.items():
+            attr = f"hard_problem_confidence_{key}"
+            if hasattr(self.config, attr):
+                setattr(self.config, attr, float(value))
+
+        # Load score decay curve from registry metadata
+        decay = self.registry.get("metadata", {}).get("score_decay", {})
+        for key, value in decay.items():
+            attr = f"score_decay_{key}"
+            if hasattr(self.config, attr):
+                setattr(self.config, attr, float(value))
+
         # Load system prompt (for LLM mode)
         if system_prompt_path is None:
             # Try environment variable first
@@ -178,11 +257,11 @@ class ModelRecommendationEngine:
             if env_path:
                 system_prompt_path = Path(env_path)
             else:
-                # Default to SystemPrompt_v3.md in docs/
+                # Default to SystemPrompt.md in config/
                 system_prompt_path = (
                     Path(__file__).parent.parent.parent.parent
-                    / "docs"
-                    / "SystemPrompt_v3.md"
+                    / "config"
+                    / "SystemPrompt.md"
                 )
 
         self.system_prompt_path = system_prompt_path
@@ -216,17 +295,48 @@ class ModelRecommendationEngine:
                     client_kwargs["base_url"] = self.openai_base_url
 
                 self.openai_client = OpenAI(**client_kwargs)
-                self.llm_available = True
+
+                # Validate the API key with a lightweight call
+                try:
+                    self.openai_client.models.list()
+                    self.llm_available = True
+                except Exception as e:
+                    print(f"⚠ OpenAI API key validation failed: {e}")
+                    self.openai_client = None
+                    self.llm_available = False
+                    self._try_vllm_fallback()
             else:
                 self.openai_client = None
                 self.llm_available = False
+                self._try_vllm_fallback()
         except ImportError:
             self.openai_client = None
             self.llm_available = False
+
+    def _try_vllm_fallback(self):
+        """Attempt to fall back to vLLM if OpenAI is unavailable."""
+        vllm_url = os.getenv("VLLM_URL")
+        if not vllm_url or self.openai_base_url == vllm_url:
+            return  # No vLLM configured or already tried vLLM
+
+        print(f"↻ Attempting vLLM fallback at {vllm_url}")
+        try:
+            from openai import OpenAI
+
+            vllm_key = os.getenv("VLLM_API_KEY", "EMPTY")
+            vllm_model = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-32B-Instruct")
+
+            client = OpenAI(api_key=vllm_key, base_url=vllm_url)
+            client.models.list()
+
+            self.openai_client = client
+            self.openai_api_key = vllm_key
+            self.openai_base_url = vllm_url
+            self.openai_model = vllm_model
+            self.llm_available = True
+            print(f"✓ vLLM fallback succeeded (model: {vllm_model})")
         except Exception as e:
-            # Handle API key validation errors gracefully
-            self.openai_client = None
-            self.llm_available = False
+            print(f"⚠ vLLM fallback also failed: {e}")
 
     @property
     def model_capabilities(self) -> Dict[str, Any]:
@@ -240,6 +350,8 @@ class ModelRecommendationEngine:
         constraints: Optional[Dict[str, Any]] = None,
         top_n: int = 3,
         method: str = "rule_based",
+        focus: Optional[str] = None,
+        scale_factors: Optional[Dict[str, float]] = None,
     ) -> RecommendationResult:
         """Generate model recommendations.
 
@@ -249,6 +361,11 @@ class ModelRecommendationEngine:
             constraints: Optional user constraints (cpu_only, strict_dp, etc.)
             top_n: Number of alternative recommendations
             method: Recommendation method - 'rule_based', 'llm', or 'hybrid'
+            focus: Optional focus name (e.g. "privacy", "fidelity", "latency").
+                Looks up scale factors from the focus registry.
+            scale_factors: Optional dict of capability->float scale factors.
+                Overrides focus if both provided. When provided, the hard
+                problem path is skipped so that scoring respects scale factors.
 
         Returns:
             RecommendationResult with recommendations
@@ -257,9 +374,14 @@ class ModelRecommendationEngine:
         from synthony.core.schemas import RecommendationConstraints
         if isinstance(constraints, RecommendationConstraints):
             constraints = constraints.model_dump()
-        
+
         constraints = constraints or {}
         constraints["dataset_rows"] = dataset_profile.row_count
+
+        # Resolve scale factors: explicit > focus > None
+        resolved_sf = scale_factors
+        if resolved_sf is None and focus is not None:
+            resolved_sf = get_scale_factors(focus)
 
         if method == "llm":
             return self._recommend_llm(
@@ -271,7 +393,8 @@ class ModelRecommendationEngine:
             )
         else:  # rule_based (default)
             return self._recommend_rule_based(
-                dataset_profile, column_analysis, constraints, top_n
+                dataset_profile, column_analysis, constraints, top_n,
+                scale_factors=resolved_sf,
             )
 
     def _recommend_rule_based(
@@ -280,13 +403,15 @@ class ModelRecommendationEngine:
         column_analysis: Optional[ColumnAnalysisResult],
         constraints: Dict[str, Any],
         top_n: int,
+        scale_factors: Optional[Dict[str, float]] = None,
     ) -> RecommendationResult:
         """Rule-based recommendation with v2 Hard Problem detection.
-        
+
         Flow:
         1. Apply hard filters (cpu_only, strict_dp, size constraints)
         2. Check for Hard Problem (skew AND cardinality AND zipfian)
-           - If yes: Route to GReaT with safety checks
+           - If yes AND no scale_factors: Route to GReaT with safety checks
+           - If yes AND scale_factors: Skip hard problem path (use normal scoring)
         3. Calculate weighted capability scores
         4. Apply tie-breaking rules
         5. Build and return recommendation
@@ -294,10 +419,10 @@ class ModelRecommendationEngine:
         # Apply prefer_speed default if not specified
         if "prefer_speed" not in constraints:
             constraints["prefer_speed"] = self.config.prefer_speed_default
-        
+
         # Step 1: Apply hard filters
         eligible_models, excluded_models = self._apply_hard_filters(constraints)
-        
+
         if not eligible_models:
             raise ValueError(
                 f"No eligible models after applying constraints. "
@@ -306,8 +431,10 @@ class ModelRecommendationEngine:
 
         # Step 2: Check for Hard Problem
         is_hard, hard_details = self._is_hard_problem(dataset_profile)
-        
-        if is_hard:
+
+        # Skip the hard problem path when scale_factors are provided so that
+        # scoring respects the scale factors instead of using fixed routing.
+        if is_hard and scale_factors is None:
             # Hard Problem Path: Route to specialized models
             hard_recommended = self._handle_hard_problem(
                 dataset_profile, eligible_models, excluded_models
@@ -331,18 +458,24 @@ class ModelRecommendationEngine:
         )
 
         # Step 4: Score models
-        scored_models = self._score_models(eligible_models, required_capabilities)
+        scored_models = self._score_models(
+            eligible_models, required_capabilities, scale_factors=scale_factors
+        )
 
         # Step 5: Sort by score
         sorted_models = sorted(
             scored_models, key=lambda x: x["total_score"], reverse=True
         )
 
-        # Step 6: Apply tie-breaking
-        primary_name = self._apply_tie_breaking(
-            sorted_models, dataset_profile, constraints
-        )
-        
+        # Step 6: Apply tie-breaking (skipped when scale_factors provided,
+        # since scale factors already encode user preference)
+        if scale_factors is None:
+            primary_name = self._apply_tie_breaking(
+                sorted_models, dataset_profile, constraints
+            )
+        else:
+            primary_name = sorted_models[0]["model_name"]
+
         # Re-order sorted_models to put primary first
         primary_model = next(
             m for m in sorted_models if m["model_name"] == primary_name
@@ -353,11 +486,15 @@ class ModelRecommendationEngine:
 
         # Step 7: Build recommendations
         primary = self._build_recommendation(
-            primary_model, required_capabilities, constraints
+            primary_model, required_capabilities, constraints,
+            scale_factors=scale_factors,
         )
 
         alternatives = [
-            self._build_recommendation(model, required_capabilities, constraints)
+            self._build_recommendation(
+                model, required_capabilities, constraints,
+                scale_factors=scale_factors,
+            )
             for model in other_models[:top_n]
         ]
 
@@ -433,34 +570,36 @@ class ModelRecommendationEngine:
         excluded_models: Dict[str, str],
     ) -> Optional[str]:
         """Handle Hard Problem routing with safety checks.
-        
+
+        All model names are read from config (loaded from registry
+        hard_problem_routing), not hardcoded.
+
         Decision Logic:
-        1. If rows > large_data_threshold → Recommend TabDDPM (GReaT too slow)
-        2. If GReaT in candidate pool → Recommend GReaT
-        3. Else → Recommend from fallback list (TabSyn > ARF > TabTree)
-        
+        1. If rows > large_data_threshold → Use large_data_fallback
+        2. If primary model in eligible pool → Use primary
+        3. Else → Walk fallback_priority list
+
         Returns:
             Model name to recommend, or None if no suitable model found
         """
         row_count = dataset_profile.row_count
-        
-        # Large data: GReaT too slow
+
+        # Large data: primary model may be too slow
         if row_count > self.config.large_data_threshold:
-            # Prefer TabDDPM for large hard problems
-            if "TabDDPM" in eligible_models:
-                return "TabDDPM"
-            elif "TabSyn" in eligible_models:
-                return "TabSyn"
-        
-        # Check if GReaT is available (best for hard problems)
-        if "GReaT" in eligible_models:
-            return "GReaT"
-        
-        # Fallback: TabSyn > ARF > TabTree (priority order from config)
+            fallback = self.config.hard_problem_large_data_fallback
+            if fallback in eligible_models:
+                return fallback
+
+        # Primary choice for hard problems
+        primary = self.config.hard_problem_primary
+        if primary in eligible_models:
+            return primary
+
+        # Fallback priority from registry
         for backup in self.config.hard_problem_fallback:
             if backup in eligible_models:
                 return backup
-        
+
         return None  # No suitable model found
 
     def _apply_tie_breaking(
@@ -470,52 +609,78 @@ class ModelRecommendationEngine:
         constraints: Dict[str, Any],
     ) -> str:
         """Apply tie-breaking rules when top models are within threshold.
-        
-        Priority Order:
-        1. Small Data (<small_data_threshold rows) → ARF (prevents overfitting)
-        2. Prefer Speed → TVAE or CTGAN
-        3. Otherwise → TabDDPM (quality-focused)
-        
+
+        Uses priority lists from model_capabilities.json tie_breaking_priority:
+        1. Small Data (<small_data_threshold rows) → small_data_priority
+        2. Prefer Speed → speed_priority
+        3. Otherwise → quality_priority (empirically calibrated)
+
         Returns:
             Model name after tie-breaking
         """
         if len(sorted_models) < 2:
             return sorted_models[0]["model_name"]
-        
+
         top_score = sorted_models[0]["total_score"]
         second_score = sorted_models[1]["total_score"]
-        
+
         # Check if within tie threshold
         threshold_fraction = self.config.tie_threshold_percent / 100.0
         score_diff = (top_score - second_score) / max(top_score, 0.01)
-        
+
         if score_diff > threshold_fraction:
             return sorted_models[0]["model_name"]  # Clear winner
-        
-        # Tie detected - apply rules
+
+        # Tie detected - apply rules using registry priorities
         row_count = dataset_profile.row_count
         prefer_speed = constraints.get("prefer_speed", self.config.prefer_speed_default)
-        
-        candidates = [m["model_name"] for m in sorted_models[:3]]
-        
-        # Rule 1: Small data → ARF (prevents overfitting)
+
+        candidates = [m["model_name"] for m in sorted_models[:5]]
+
+        # Read priority lists from registry (with sensible defaults)
+        registry_tb = self.registry.get("tie_breaking_priority", {})
+
+        # Rule 1: Small data → prefer models robust to overfitting
         if row_count < self.config.small_data_threshold:
-            if "ARF" in candidates:
-                return "ARF"
-            if "GaussianCopula" in candidates:
-                return "GaussianCopula"
-        
+            priority = registry_tb.get(
+                "small_data_priority", ["ARF", "CART", "BayesianNetwork", "SMOTE"]
+            )
+            for model in priority:
+                if model in candidates:
+                    return model
+
         # Rule 2: Speed preference
         if prefer_speed:
-            for fast_model in ["TVAE", "CTGAN", "ARF", "GaussianCopula"]:
-                if fast_model in candidates:
-                    return fast_model
-        
-        # Rule 3: Default to quality (diffusion models)
-        for quality_model in ["TabDDPM", "TabSyn", "AutoDiff"]:
-            if quality_model in candidates:
-                return quality_model
-        
+            priority = registry_tb.get(
+                "speed_priority", ["CART", "ARF", "SMOTE", "TVAE", "DPCART"]
+            )
+            for model in priority:
+                if model in candidates:
+                    return model
+
+        # Rule 3: Quality preference — GPU vs CPU path
+        cpu_only = constraints.get("cpu_only", False)
+        if not cpu_only:
+            # GPU available: prefer Diffusion/LLM/Transformer models
+            priority = registry_tb.get(
+                "gpu_quality_priority",
+                ["GReaT", "TabDDPM", "TabSyn", "AutoDiff", "TVAE", "PATECTGAN"],
+            )
+            for model in priority:
+                if model in candidates:
+                    return model
+
+        # CPU-only or no GPU model in candidates: use CPU quality priority
+        priority = registry_tb.get(
+            "cpu_quality_priority",
+            registry_tb.get(
+                "quality_priority", ["CART", "SMOTE", "BayesianNetwork", "ARF", "NFlow"]
+            ),
+        )
+        for model in priority:
+            if model in candidates:
+                return model
+
         return sorted_models[0]["model_name"]
 
     def _build_hard_problem_result(
@@ -541,17 +706,19 @@ class ModelRecommendationEngine:
             f"  • Zipfian Distribution: {hard_details['zipfian']}",
         ]
         
-        if recommended_model == "GReaT":
+        primary = self.config.hard_problem_primary
+        if recommended_model == primary:
+            strengths = model_info.get("strengths", [primary + " model"])
             reasoning.append(
-                "✓ GReaT selected: Best-in-class for handling complex tail distributions"
+                f"✓ {recommended_model} selected: {strengths[0] if strengths else 'Primary hard problem model'}"
             )
-        elif recommended_model == "TabDDPM":
+        elif recommended_model == self.config.hard_problem_large_data_fallback:
             reasoning.append(
-                "✓ TabDDPM selected: GReaT too slow for large data, using diffusion fallback"
+                f"✓ {recommended_model} selected: {primary} too slow for large data, using fallback"
             )
         else:
             reasoning.append(
-                f"✓ {recommended_model} selected: Best available backup for hard problems"
+                f"✓ {recommended_model} selected: Best available from fallback priority"
             )
         
         # Warnings
@@ -560,15 +727,21 @@ class ModelRecommendationEngine:
             warnings.append(
                 f"⚠ Large dataset ({dataset_profile.row_count} rows) may require significant compute time"
             )
-        if recommended_model != "GReaT" and "GReaT" not in eligible_models:
+        hp_primary = self.config.hard_problem_primary
+        if recommended_model != hp_primary and hp_primary not in eligible_models:
             warnings.append(
-                "⚠ GReaT (optimal for hard problems) was filtered out by constraints"
+                f"⚠ {hp_primary} (optimal for hard problems) was filtered out by constraints"
             )
-        
+
         # Build primary recommendation
+        primary_conf = (
+            self.config.hard_problem_confidence_primary
+            if recommended_model == hp_primary
+            else self.config.hard_problem_confidence_fallback
+        )
         primary = ModelRecommendation(
             model_name=recommended_model,
-            confidence_score=0.95 if recommended_model == "GReaT" else 0.85,
+            confidence_score=primary_conf,
             capability_match=model_info.get("capabilities", {}),
             reasoning=reasoning,
             warnings=warnings,
@@ -583,7 +756,7 @@ class ModelRecommendationEngine:
             alternatives.append(
                 ModelRecommendation(
                     model_name=alt_name,
-                    confidence_score=0.70,
+                    confidence_score=self.config.hard_problem_confidence_alternative,
                     capability_match=alt_info.get("capabilities", {}),
                     reasoning=[f"Alternative to {recommended_model} for hard problem"],
                     warnings=[],
@@ -639,17 +812,19 @@ class ModelRecommendationEngine:
             system_message = self.system_prompt
             print(f"🤖 Using SystemPrompt from: {self.system_prompt_path.name}")
         else:
-            system_message = """You are an expert in synthetic data generation models.
+            model_count = len(self.models)
+            model_names = ", ".join(sorted(self.models.keys()))
+            system_message = f"""You are an expert in synthetic data generation models.
 
-You have access to 12+ state-of-the-art synthesis models with different capabilities.
+You have access to {model_count} state-of-the-art synthesis models: {model_names}.
 Your task is to analyze the dataset characteristics and recommend the best model.
 
 Consider:
-- Skewness (>2.0 requires specialized models)
-- High cardinality (>500 unique values)
+- Skewness (>{self.config.skew_threshold} requires specialized models)
+- High cardinality (>{self.config.cardinality_threshold} unique values)
 - Zipfian distributions (top 20% categories dominate)
-- Data size (small <500 rows, large >50k rows)
-- User constraints (cpu_only, differential privacy)
+- Data size (small <{self.config.small_data_threshold} rows, large >{self.config.large_data_threshold} rows)
+- User constraints (cpu_only, differential privacy with dp score >= {self.config.dp_min_score})
 
 Return recommendations in JSON format with clear reasoning."""
             print(f"⚠ Using default prompt (SystemPrompt not loaded)")
@@ -955,7 +1130,19 @@ Return ONLY valid JSON."""
         eligible = []
         excluded = {}
 
+        allowed_models = constraints.get("allowed_models")
+
         for model_name, model_info in self.models.items():
+            # Skip excluded models (not benchmarked or baselines)
+            if model_info.get("exclude", False):
+                excluded[model_name] = "Model excluded from recommendations (exclude=true)"
+                continue
+
+            # Restrict to allowed_models if specified
+            if allowed_models is not None and model_name not in allowed_models:
+                excluded[model_name] = "Not in allowed_models list"
+                continue
+
             model_constraints = model_info["constraints"]
 
             # CPU-only constraint
@@ -964,10 +1151,13 @@ Return ONLY valid JSON."""
                     excluded[model_name] = "Requires GPU (cpu_only constraint active)"
                     continue
 
-            # Strict DP constraint
+            # Strict DP constraint (threshold from registry metadata.dp_threshold)
             if constraints.get("strict_dp", False):
-                if model_info["capabilities"]["privacy_dp"] < 3:
-                    excluded[model_name] = "Insufficient DP (strict_dp constraint)"
+                if model_info["capabilities"]["privacy_dp"] < self.config.dp_min_score:
+                    excluded[model_name] = (
+                        f"Insufficient DP: privacy_dp={model_info['capabilities']['privacy_dp']} "
+                        f"< required {self.config.dp_min_score}"
+                    )
                     continue
 
             # Row constraints
@@ -992,7 +1182,11 @@ Return ONLY valid JSON."""
         dataset_profile: DatasetProfile,
         column_analysis: Optional[ColumnAnalysisResult],
     ) -> Dict[str, int]:
-        """Calculate required capabilities from dataset."""
+        """Calculate required capabilities from dataset.
+
+        All thresholds are read from self.config (loaded from registry
+        metadata.capability_thresholds), not hardcoded.
+        """
         required = {
             "skew_handling": 0,
             "cardinality_handling": 0,
@@ -1002,38 +1196,66 @@ Return ONLY valid JSON."""
         }
 
         stress = dataset_profile.stress_factors
+        cfg = self.config
 
         # Skew
         if stress.severe_skew and dataset_profile.skewness:
             max_skew = dataset_profile.skewness.max_skewness
-            required["skew_handling"] = 4 if max_skew >= 4.0 else 3
+            required["skew_handling"] = (
+                cfg.skew_high_required if max_skew >= cfg.skew_severe_boundary
+                else cfg.skew_moderate_required
+            )
 
         # Cardinality
         if stress.high_cardinality and dataset_profile.cardinality:
             max_card = dataset_profile.cardinality.max_cardinality
-            required["cardinality_handling"] = 4 if max_card >= 5000 else 3
+            required["cardinality_handling"] = (
+                cfg.cardinality_high_required if max_card >= cfg.cardinality_severe_boundary
+                else cfg.cardinality_moderate_required
+            )
 
         # Zipfian
         if stress.zipfian_distribution and dataset_profile.zipfian:
             if dataset_profile.zipfian.top_20_percent_ratio:
                 ratio = dataset_profile.zipfian.top_20_percent_ratio
-                required["zipfian_handling"] = 4 if ratio >= 0.9 else 3
+                required["zipfian_handling"] = (
+                    cfg.zipfian_high_required if ratio >= cfg.zipfian_severe_ratio
+                    else cfg.zipfian_moderate_required
+                )
 
         # Small data
         if stress.small_data:
-            required["small_data"] = 4
+            required["small_data"] = cfg.small_data_required
 
         # Correlation
         if stress.higher_order_correlation:
-            required["correlation_handling"] = 3
+            required["correlation_handling"] = cfg.correlation_required
 
         return required
 
     def _score_models(
-        self, eligible_models: List[str], required_capabilities: Dict[str, int]
+        self,
+        eligible_models: List[str],
+        required_capabilities: Dict[str, int],
+        scale_factors: Optional[Dict[str, float]] = None,
     ) -> List[Dict[str, Any]]:
-        """Score models based on capability match."""
+        """Score models based on capability match.
+
+        Args:
+            eligible_models: List of model names that passed hard filters.
+            required_capabilities: Dict of capability->required_level.
+            scale_factors: Optional dict of capability->float multiplier.
+                When provided, ``weight = base_weight * scale_factor``.
+        """
         scored = []
+
+        # When scale_factors are provided, also score capabilities not in
+        # required_capabilities (e.g. privacy_dp) so that scale factors
+        # can promote models with those strengths.
+        if scale_factors:
+            all_caps = set(required_capabilities) | set(scale_factors)
+        else:
+            all_caps = set(required_capabilities)
 
         for model_name in eligible_models:
             model_capabilities = self.models[model_name]["capabilities"]
@@ -1041,27 +1263,43 @@ Return ONLY valid JSON."""
             capability_scores = {}
             total_score = 0.0
 
-            for capability, required in required_capabilities.items():
+            for capability in all_caps:
+                required = required_capabilities.get(capability, 0)
                 model_score = model_capabilities.get(capability, 0)
 
-                # Scoring
-                if model_score >= required:
-                    match_score = 1.0
+                # When the capability is not required by the dataset, use
+                # model_score/4.0 so that higher raw capability differentiates
+                # models (e.g. correlation=4 beats correlation=1). This prevents
+                # all models from scoring identically on non-stressed datasets.
+                if required == 0:
+                    match_score = model_score / 4.0
+                elif model_score >= required:
+                    match_score = self.config.score_decay_exact
                 elif model_score == required - 1:
-                    match_score = 0.7
+                    match_score = self.config.score_decay_near
                 elif model_score == required - 2:
-                    match_score = 0.4
+                    match_score = self.config.score_decay_moderate
                 else:
-                    match_score = 0.0
+                    match_score = self.config.score_decay_poor
 
-                weight = 1.0 if required > 0 else 0.1
+                base_weight = 1.0 if required > 0 else 0.1
+                sf = scale_factors.get(capability, 1.0) if scale_factors else 1.0
+                weight = base_weight * sf
                 total_score += match_score * weight
 
                 capability_scores[capability] = {
                     "required": required,
                     "model_score": model_score,
                     "match_score": match_score,
+                    "scale_factor": sf,
+                    "weight": weight,
                 }
+
+            # Empirical quality bonus from spark benchmarks
+            spark = self.models[model_name].get("spark_empirical", {})
+            quality = spark.get("avg_quality_score", 0.5)
+            quality_bonus = quality * self.config.quality_weight
+            total_score += quality_bonus
 
             scored.append(
                 {
@@ -1069,6 +1307,7 @@ Return ONLY valid JSON."""
                     "model_info": self.models[model_name],
                     "capability_scores": capability_scores,
                     "total_score": total_score,
+                    "quality_bonus": quality_bonus,
                 }
             )
 
@@ -1079,6 +1318,7 @@ Return ONLY valid JSON."""
         scored_model: Dict[str, Any],
         required_capabilities: Dict[str, int],
         constraints: Dict[str, Any],
+        scale_factors: Optional[Dict[str, float]] = None,
     ) -> ModelRecommendation:
         """Build ModelRecommendation from scored model."""
         model_name = scored_model["model_name"]
@@ -1095,7 +1335,7 @@ Return ONLY valid JSON."""
         warnings = []
 
         # Add strengths
-        for strength in model_info["strengths"][:3]:
+        for strength in model_info.get("strengths", model_info.get("best_for", []))[:3]:
             reasoning.append(f"✓ {strength}")
 
         # Add matches
@@ -1111,7 +1351,7 @@ Return ONLY valid JSON."""
                     )
 
         # Add limitations
-        for limitation in model_info["limitations"][:2]:
+        for limitation in model_info.get("limitations", [])[:2]:
             warnings.append(f"⚠ {limitation}")
 
         # Performance
@@ -1120,8 +1360,17 @@ Return ONLY valid JSON."""
             f"Performance: {perf['training_speed']} training, {perf['memory_usage']} memory"
         )
 
-        # Confidence
-        max_possible = sum(1.0 for req in required_capabilities.values() if req > 0)
+        # Confidence: denominator accounts for scale factors
+        if scale_factors:
+            max_possible = sum(
+                scale_factors.get(cap, 1.0)
+                for cap, req in required_capabilities.items()
+                if req > 0
+            )
+        else:
+            max_possible = sum(
+                1.0 for req in required_capabilities.values() if req > 0
+            )
         confidence = (
             scored_model["total_score"] / max_possible if max_possible > 0 else 1.0
         )
@@ -1145,6 +1394,8 @@ def recommend_model(
     method: str = "rule_based",
     config: Optional[EngineConfig] = None,
     openai_api_key: Optional[str] = None,
+    focus: Optional[str] = None,
+    scale_factors: Optional[Dict[str, float]] = None,
 ) -> RecommendationResult:
     """Convenience function to get recommendations.
 
@@ -1155,6 +1406,8 @@ def recommend_model(
         method: 'rule_based', 'llm', or 'hybrid'
         config: Optional EngineConfig for custom thresholds
         openai_api_key: OpenAI API key (required for 'llm' or 'hybrid')
+        focus: Optional focus name (e.g. "privacy", "fidelity", "latency")
+        scale_factors: Optional dict of capability->float scale factors
 
     Returns:
         RecommendationResult
@@ -1163,5 +1416,8 @@ def recommend_model(
         config=config,
         openai_api_key=openai_api_key,
     )
-    return engine.recommend(dataset_profile, column_analysis, constraints, method=method)
+    return engine.recommend(
+        dataset_profile, column_analysis, constraints, method=method,
+        focus=focus, scale_factors=scale_factors,
+    )
 

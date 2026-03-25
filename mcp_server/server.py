@@ -13,6 +13,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -40,6 +41,7 @@ from mcp_server.tools.data_tools import DataTools
 from mcp_server.tools.profiling_tools import ProfilingTools
 from mcp_server.tools.model_tools import ModelTools
 from mcp_server.tools.recommendation_tools import RecommendationTools
+from mcp_server.tools.benchmark_tools import BenchmarkTools
 from mcp_server.resources.model_registry import ModelRegistry
 from mcp_server.resources.profile_cache import ProfileCache
 from mcp_server.resources.benchmark_data import BenchmarkData
@@ -75,13 +77,30 @@ class SynthonyMCPServer:
         # Initialize Synthony core components
         self.analyzer = StochasticDataAnalyzer()
         self.column_analyzer = ColumnAnalyzer()
-        self.recommender = ModelRecommendationEngine()
+
+        # Configure LLM from environment (same pattern as API server)
+        vllm_url = os.getenv("VLLM_URL")
+        if vllm_url:
+            openai_api_key = os.getenv("VLLM_API_KEY")
+            openai_base_url = vllm_url
+            openai_model = os.getenv("VLLM_MODEL") or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        else:
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            openai_base_url = os.getenv("OPENAI_URL")
+            openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+        self.recommender = ModelRecommendationEngine(
+            openai_api_key=openai_api_key,
+            openai_model=openai_model,
+            openai_base_url=openai_base_url,
+        )
 
         # Initialize MCP components
         self.data_tools = DataTools()
         self.profiling_tools = ProfilingTools(self.analyzer, self.column_analyzer)
         self.model_tools = ModelTools(self.recommender)
         self.recommendation_tools = RecommendationTools(self.recommender)
+        self.benchmark_tools = BenchmarkTools()
         self.model_registry = ModelRegistry(self.recommender)
         self.profile_cache = ProfileCache()
         self.benchmark_data = BenchmarkData()
@@ -115,6 +134,9 @@ class SynthonyMCPServer:
             # Recommendation tools
             tools.extend(self.recommendation_tools.get_tool_definitions())
 
+            # Benchmark tools
+            tools.extend(self.benchmark_tools.get_tool_definitions())
+
             logger.info(f"Listed {len(tools)} tools")
             return tools
 
@@ -141,6 +163,8 @@ class SynthonyMCPServer:
                     result = await self.model_tools.execute_tool(name, arguments)
                 elif name in self.recommendation_tools.get_tool_names():
                     result = await self.recommendation_tools.execute_tool(name, arguments)
+                elif name in self.benchmark_tools.get_tool_names():
+                    result = await self.benchmark_tools.execute_tool(name, arguments)
                 else:
                     raise ValueError(f"Unknown tool: {name}")
 
