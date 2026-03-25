@@ -6,8 +6,6 @@ verifying exit codes, output content, file creation, and error handling.
 """
 
 import json
-import os
-import tempfile
 from pathlib import Path
 
 import numpy as np

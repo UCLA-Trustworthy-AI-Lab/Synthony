@@ -15,18 +15,14 @@ Test classes:
 8. TestEndToEndRecommendation - full pipeline on all datasets
 """
 
-import io
-import json
 from pathlib import Path
-from typing import Dict, List
 
-import numpy as np
 import pandas as pd
 import pytest
 
 from synthony.core.analyzer import StochasticDataAnalyzer
 from synthony.core.schemas import DatasetProfile, SkewnessMetrics, StressFactors
-from synthony.recommender.engine import EngineConfig, ModelRecommendationEngine
+from synthony.recommender.engine import ModelRecommendationEngine
 from synthony.recommender.focus_profiles import (
     CAPABILITY_NAMES,
     FOCUS_REGISTRY,

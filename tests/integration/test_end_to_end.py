@@ -5,9 +5,7 @@ Tests complete workflows from file upload through analysis to final recommendati
 """
 
 import io
-import json
 import pytest
-from pathlib import Path
 import pandas as pd
 import numpy as np
 from fastapi.testclient import TestClient
