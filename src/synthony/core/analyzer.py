@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Dict, Optional, Union
 
 import pandas as pd
-import numpy as np
 
 from synthony.core.loaders import DataLoader
 from synthony.core.schemas import DatasetProfile, StressFactors
@@ -11,7 +10,7 @@ from synthony.detectors.correlation import CorrelationDetector
 from synthony.detectors.data_size import DataSizeClassifier
 from synthony.detectors.skewness import SkewnessDetector
 from synthony.utils.constants import AnalyzerConfig, DEFAULT_CONFIG
-from synthony.core.errors import ValidationError, UnsupportedFormatError
+from synthony.core.errors import ValidationError
 
 class StochasticDataAnalyzer:
     """

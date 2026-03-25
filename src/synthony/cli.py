@@ -21,7 +21,6 @@ except ImportError:
     )
     sys.exit(1)
 
-from synthony.benchmark.generators import BenchmarkDatasetGenerator
 from synthony.core.analyzer import StochasticDataAnalyzer
 
 app = typer.Typer(help="synthony: Tabular data profiling and stress detection")
@@ -279,8 +278,7 @@ def benchmark(
         synthony-benchmark -r original.csv -s synthetic.csv -o results.json
     """
     import json
-    import pandas as pd
-    from synthony.benchmark.metrics import DataQualityBenchmark, DifferentialPrivacyMetrics
+    from synthony.benchmark.metrics import DataQualityBenchmark
     from synthony.core.loaders import DataLoader
     from synthony.core.analyzer import StochasticDataAnalyzer
     

@@ -5,7 +5,6 @@ Tests recommendation scoring, constraint filtering, and SystemPrompt loading.
 """
 
 import json
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest

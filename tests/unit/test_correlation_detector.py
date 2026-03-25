@@ -6,7 +6,6 @@ Tests higher-order correlation detection (dense correlation matrix with low R²)
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from synthony.detectors.correlation import CorrelationDetector
 

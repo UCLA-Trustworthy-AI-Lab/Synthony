@@ -15,7 +15,6 @@ Run with: uvicorn synthony.api.server:app --reload
 """
 
 import requests
-import json
 import pytest
 from pathlib import Path
 
