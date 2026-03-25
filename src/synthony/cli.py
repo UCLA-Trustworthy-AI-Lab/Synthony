@@ -278,7 +278,8 @@ def benchmark(
         synthony-benchmark -r original.csv -s synthetic.csv -o results.json
     """
     import json
-    from synthony.benchmark.metrics import DataQualityBenchmark
+    import pandas as pd
+    from synthony.benchmark.metrics import DataQualityBenchmark, DifferentialPrivacyMetrics
     from synthony.core.loaders import DataLoader
     from synthony.core.analyzer import StochasticDataAnalyzer
     

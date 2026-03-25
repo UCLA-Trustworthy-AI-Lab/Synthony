@@ -231,6 +231,7 @@ configs_targets = {
 }
 
 import pandas as pd
+import numpy as np
 
 MISSING = "__MISSING__"
 

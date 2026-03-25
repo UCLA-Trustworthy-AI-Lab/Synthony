@@ -354,6 +354,13 @@ For commercial licensing inquiries: ohsono@gmail.com / hochanson@g.ucla.edu
 - Jason Ni (jasonni19@g.ucla.edu)
 - Guang Cheng (guangcheng@g.ucla.edu)
 
+## Maintainer
+
+- Hochan Son (ohsono@gmail.com,hochanson@g.ucla.edu)
+- Xiaofeng Lin (Bernardo1998@g.ucla.edu)
+- Jason Ni (jasonni19@g.ucla.edu)
+- Guang Cheng (guangcheng@g.ucla.edu)
+
 ## Citation
 
 If you use Synthony in your research, please cite our paper:

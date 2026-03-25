@@ -30,6 +30,7 @@ from synthony.core.column_analyzer import ColumnAnalyzer
 from synthony.recommender.engine import ModelRecommendationEngine
 from synthony.recommender.focus_profiles import (
     CAPABILITY_NAMES,
+    FOCUS_REGISTRY,
     register_focus,
 )
 

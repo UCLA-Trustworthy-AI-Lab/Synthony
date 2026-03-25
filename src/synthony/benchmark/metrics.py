@@ -9,7 +9,7 @@ Provides simple comparison metrics including:
 - Column-wise Distance Metrics
 """
 
-from typing import Dict, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd

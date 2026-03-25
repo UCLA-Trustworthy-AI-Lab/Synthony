@@ -15,12 +15,30 @@ Run with: uvicorn synthony.api.server:app --reload
 """
 
 import requests
+import json
+import pytest
 import pytest
 from pathlib import Path
 
 # Configuration
 BASE_URL = "http://localhost:8000"
 TEST_DATA_DIR = Path("dataset/input_data")
+
+
+def server_is_running():
+    """Check if API server is running."""
+    try:
+        response = requests.get(f"{BASE_URL}/health", timeout=2)
+        return response.status_code == 200
+    except requests.exceptions.ConnectionError:
+        return False
+
+
+# Skip all tests in this module if server is not running
+pytestmark = pytest.mark.skipif(
+    not server_is_running(),
+    reason="API server not running at localhost:8000"
+)
 
 
 def server_is_running():

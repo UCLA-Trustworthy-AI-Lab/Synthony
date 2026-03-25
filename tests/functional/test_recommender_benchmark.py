@@ -12,12 +12,13 @@ This test module evaluates:
 
 import json
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List, Tuple
 from unittest.mock import Mock, patch
 
+import pandas as pd
 import pytest
 
-from synthony.recommender.engine import ModelRecommendationEngine
+from synthony.recommender.engine import ModelRecommendationEngine, EngineConfig
 from synthony.core.schemas import DatasetProfile, StressFactors, ZipfianMetrics
 
 
