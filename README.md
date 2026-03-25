@@ -2,11 +2,14 @@
 
 **Orchestrating the right synthetic data model for your tabular data.**
 
+[![Paper](https://img.shields.io/badge/ICLR%202026-DeLTa%20Workshop-blueviolet)](https://openreview.net/forum?id=cj4SNumWqf)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange.svg)]()
 
 Synthony is an intelligent recommendation platform that analyzes your tabular dataset's characteristics and recommends the optimal synthetic data generation model from 15 state-of-the-art options. Like a symphony conductor orchestrating instruments, Synthony orchestrates the right model for your data.
+
+> **Published at the 2nd DeLTa Workshop, ICLR 2026**
+> [Paper](https://openreview.net/forum?id=cj4SNumWqf) | [Code](https://github.com/UCLA-Trustworthy-AI-Lab/Synthony)
 
 ## Why Synthony?
 
@@ -66,6 +69,9 @@ pip install -e ".[api]"
 
 # LLM-based recommendations (requires OpenAI API key)
 pip install -e ".[llm]"
+
+# Polars dataframe support
+pip install -e ".[polars]"
 
 # Everything
 pip install -e ".[all]"
@@ -328,6 +334,8 @@ pytest tests/unit/test_skewness_detector.py -v
 ## Roadmap
 
 - [ ] PyPI package publication
+- [ ] Learned capability embeddings (replacing hand-crafted registry)
+- [ ] Expanded benchmark (20+ datasets)
 
 ## Contributing
 
@@ -348,14 +356,17 @@ MIT License with prior authorization requirement — see [LICENSE.md](LICENSE.md
 
 ## Citation
 
+If you use Synthony in your research, please cite our paper:
+
 ```bibtex
-@inproceedings{
-son2026synthony,
-title={{SYNTHONY}: A Stress-Aware, Intent-Conditioned Agent for Deep Tabular Generative Models Selection},
-author={Hochan Son and Xiaofeng Lin and Jason Ni and Guang Cheng},
-booktitle={ICLR 2026 2nd Workshop on Deep Generative Model in Machine Learning: Theory, Principle and Efficacy},
-year={2026},
-url={https://openreview.net/forum?id=cj4SNumWqf}
+@inproceedings{son2026synthony,
+  title     = {{SYNTHONY}: A Stress-Aware, Intent-Conditioned Agent for Deep
+               Tabular Generative Model Selection},
+  author    = {Hochan Son and Xiaofeng Lin and Jason Ni and Guang Cheng},
+  booktitle = {ICLR 2026 2nd Workshop on Deep Generative Model in Machine
+               Learning: Theory, Principle and Efficacy (DeLTa)},
+  year      = {2026},
+  url       = {https://openreview.net/forum?id=cj4SNumWqf}
 }
 ```
 

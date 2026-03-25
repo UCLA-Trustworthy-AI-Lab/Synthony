@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Synthony** is an intelligent orchestration platform that recommends the optimal synthetic tabular data generation model from 15 SOTA models based on dataset characteristics. It analyzes data "stress factors" (skewness, cardinality, Zipfian distributions) and matches them to model capabilities using a hybrid rule-based + LLM decision engine.
 
+**Published at the 2nd DeLTa Workshop, ICLR 2026** ([Paper](https://openreview.net/forum?id=cj4SNumWqf))
+
 ## Common Commands
 
 ### Installation
@@ -18,6 +20,8 @@ pip install -e ".[llm]"           # LLM support (requires OPENAI_API_KEY)
 pip install -e ".[mcp]"           # MCP server
 pip install -e ".[all]"           # Everything
 pip install -e ".[dev]"           # Development (pytest, black, ruff, mypy)
+pip install -e ".[test]"          # Test suite (pytest, pytest-asyncio, mcp, openai)
+pip install -e ".[polars]"        # Polars dataframe support
 ```
 
 ### CLI Commands
@@ -59,12 +63,22 @@ mypy src/                                 # Type check
 ### Servers
 
 ```bash
-# FastAPI REST server
+# FastAPI REST server (via entry point or uvicorn)
+synthony-api
 uvicorn synthony.api.server:app --reload
 # Then visit http://localhost:8000/docs for API documentation
 
-# MCP server (for AI agent integration)
+# MCP server (via entry point or module)
+synthony-mcp
 python -m mcp_server.server --verbose
+```
+
+### Docker
+
+```bash
+docker build -t synthony .                    # Production container
+docker build -f Dockerfile.mcp -t synthony-mcp .  # MCP server container
+docker-compose up                             # Full stack
 ```
 
 ## Architecture
@@ -103,7 +117,12 @@ RecommendationResult
 | `src/synthony/recommender/` | Recommendation engine + model capabilities registry |
 | `src/synthony/api/` | FastAPI REST server with SQLite persistence |
 | `src/synthony/benchmark/` | Data quality metrics (KL/JS divergence, fidelity, utility, privacy) |
-| `mcp_server/` | MCP protocol server for AI agent integration |
+| `src/synthony/utils/` | Configuration constants (`AnalyzerConfig`), thresholds |
+| `mcp_server/` | MCP protocol server for AI agent integration (tools, resources, prompts) |
+| `config/` | Model capabilities registry (`model_capabilities.json`), LLM system prompt |
+| `scripts/` | Optimization scripts (`optimize_scaling.py` for Bayesian calibration) |
+| `ablation/` | Ablation study runner (`run_ablations.py`) |
+| `tests/` | Unit, integration, functional, evaluation, and regression tests |
 
 ### Stress Detection Thresholds
 
@@ -147,10 +166,14 @@ The registry also stores all engine configuration:
 ## Key Files
 
 - `src/synthony/core/schemas.py` - Pydantic models: `DatasetProfile`, `StressFactors`, `RecommendationResult`
+- `src/synthony/core/analyzer.py` - `StochasticDataAnalyzer` main profiling class
+- `src/synthony/recommender/engine.py` - `ModelRecommendationEngine` core scoring logic (1,400+ lines)
 - `src/synthony/utils/constants.py` - `AnalyzerConfig` with all configurable thresholds
+- `config/model_capabilities.json` - Model registry v7.0.0 (15 models × 6 capability dims)
 - `config/SystemPrompt.md` - LLM system prompt v5.0 (canonical, used by engine)
+- `scripts/optimize_scaling.py` - Bayesian optimization of scale factors (Optuna/TPE)
+- `ablation/run_ablations.py` - Ablation study experiment runner
 - `docs/scoring_methodology.md` - Capability scoring formulas and engine pipeline
-- `docs/ISSUE_recommender_accuracy_v7.md` - Resolved accuracy issue report
 
 ## MCP Server Integration
 
@@ -164,6 +187,10 @@ The MCP server exposes tools for AI agents:
 | `rank_models_hybrid` | Get recommendations (rule + LLM) |
 | `rank_models_rule` | Rule-based recommendations only |
 | `rank_models_llm` | LLM-based recommendations only |
+| `benchmark_compare` | Compare synthetic vs original data quality |
+| `get_model_info` | Model capabilities and constraints |
+| `check_model_constraints` | Validate model compatibility |
+| `explain_recommendation_reasoning` | Explain why a model was recommended |
 
 Test MCP protocol:
 ```bash
@@ -188,4 +215,27 @@ print(f"High Cardinality: {profile.stress_factors.high_cardinality}")
 engine = ModelRecommendationEngine()
 result = engine.recommend(profile, method="rule_based")
 print(f"Recommended: {result.recommended_model.model_name}")
+
+# With intent-conditioned scale factors
+result = engine.recommend(profile, method="rule_based", focus="privacy")
+result = engine.recommend(profile, method="rule_based", focus="fidelity")
+
+# With constraints
+result = engine.recommend(
+    profile,
+    method="rule_based",
+    constraints={"cpu_only": True, "strict_dp": True},
+)
 ```
+
+## Entry Points
+
+Defined in `pyproject.toml`:
+
+| Command | Source | Purpose |
+|---------|--------|---------|
+| `synthony-profile` | `synthony.cli:profile_command` | Profile dataset stress factors |
+| `synthony-benchmark` | `synthony.cli:benchmark_command` | Compare original vs synthetic |
+| `synthony-recommender` | `synthony.cli:recommender_command` | Get model recommendations |
+| `synthony-api` | `synthony.api.server:main` | Start FastAPI REST server |
+| `synthony-mcp` | `mcp_server.server:main` | Start MCP server |
