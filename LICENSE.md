@@ -49,4 +49,5 @@ SOFTWARE.
 For commercial use inquiries, please contact:
 
 - **Hochan Son** — ohsono@gmail.com / hochanson@g.ucla.edu
-- **UCLA Trustworthy AI Lab** — https://www.trustworthyai.ucla.edu
+- **Guang Cheng** - guangcheng@stat.ucla.edu
+- **UCLA Trustworthy AI Lab** — http://www.stat.ucla.edu/~guangcheng/
