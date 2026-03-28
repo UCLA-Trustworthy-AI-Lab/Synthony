@@ -8,6 +8,7 @@
 #   docker build -f Dockerfile.test -t synthony-test .
 #   docker run --rm --network host \
 #     -e SYNTHONY_API_URL=http://localhost:8000 \
+#     -v ./dataset/input_data:/app/dataset/input_data \
 #     synthony-test
 # ============================================================
 
@@ -17,9 +18,6 @@ WORKDIR /app
 
 # Install test dependencies
 RUN pip install --no-cache-dir requests
-
-# Copy dataset files needed by functional scripts
-COPY dataset/input_data/ /app/dataset/input_data/
 
 # Copy the test scripts
 COPY tests/functional/test_api_advanced.py /app/tests/functional/test_api_advanced.py
