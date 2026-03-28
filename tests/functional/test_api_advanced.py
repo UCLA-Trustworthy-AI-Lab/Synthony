@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """Advanced API testing scenarios."""
 
+import os
+from pathlib import Path
 import requests
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.environ.get("SYNTHONY_API_URL", "http://localhost:8000")
+# Dataset directory: override with SYNTHONY_DATA_DIR env var
+_default_data_dir = Path(__file__).resolve().parents[2] / "dataset" / "input_data"
+DATA_DIR = Path(os.environ.get("SYNTHONY_DATA_DIR", str(_default_data_dir)))
 
 print("=" * 80)
 print("Advanced API Testing Scenarios")
@@ -14,7 +19,7 @@ print("\n📋 Scenario 1: Two-step workflow")
 print("-" * 80)
 print("Step 1: Analyze dataset...")
 
-with open("/Users/hochan.son/Project/Synthony/dataset/input_data/abalone.csv", "rb") as f:
+with open(DATA_DIR / "abalone.csv", "rb") as f:
     response = requests.post(
         f"{BASE_URL}/analyze",
         params={"dataset_id": "abalone"},
@@ -68,7 +73,7 @@ print(f"     ✓ Confidence: {rec_result['recommended_model']['confidence_score'
 print("\n📋 Scenario 2: Comparing constraints (Bean dataset)")
 print("-" * 80)
 
-with open("/Users/hochan.son/Project/Synthony/dataset/input_data/Bean.csv", "rb") as f:
+with open(DATA_DIR / "Bean.csv", "rb") as f:
     file_content = f.read()
 
 # Test with CPU-only constraint
@@ -115,7 +120,7 @@ response = requests.get(f"{BASE_URL}/models", params={"requires_dp": True})
 dp_models = response.json()
 print(f"  DP-enabled models: {list(dp_models['models'].keys())}")
 
-with open("/Users/hochan.son/Project/Synthony/dataset/input_data/insurance.csv", "rb") as f:
+with open(DATA_DIR / "insurance.csv", "rb") as f:
     response = requests.post(
         f"{BASE_URL}/analyze-and-recommend",
         params={"dataset_id": "insurance_dp", "strict_dp": True, "top_n": 2},
