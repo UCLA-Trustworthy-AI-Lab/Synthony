@@ -55,6 +55,7 @@ docs/
 
 # Tests (not needed in production image)
 tests/
+!tests/functional/test_llm_with_systemprompt.py
 test_*.py
 
 # Development files
