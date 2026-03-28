@@ -1,0 +1,35 @@
+# ============================================================
+# Synthony - Test Runner Dockerfile
+# ============================================================
+# Runs functional live-server tests (test_api_advanced.py,
+# test_llm_with_systemprompt.py) against the running API.
+#
+# Usage (against a running container):
+#   docker build -f Dockerfile.test -t synthony-test .
+#   docker run --rm --network host \
+#     -e SYNTHONY_API_URL=http://localhost:8000 \
+#     synthony-test
+# ============================================================
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install test dependencies
+RUN pip install --no-cache-dir requests
+
+# Copy dataset files needed by functional scripts
+COPY dataset/input_data/ /app/dataset/input_data/
+
+# Copy the test scripts
+COPY tests/functional/test_api_advanced.py /app/tests/functional/test_api_advanced.py
+COPY tests/functional/test_llm_with_systemprompt.py /app/tests/functional/test_llm_with_systemprompt.py
+
+# Environment defaults (overridable at runtime)
+ENV SYNTHONY_API_URL=http://localhost:8000 \
+    SYNTHONY_DATA_DIR=/app/dataset/input_data
+
+# Run both scripts sequentially; exit non-zero if either fails
+CMD ["sh", "-c", \
+  "python tests/functional/test_api_advanced.py && \
+   python tests/functional/test_llm_with_systemprompt.py"]
