@@ -93,8 +93,8 @@ class StochasticDataAnalyzer:
                 skewness_threshold=2.0,
                 cardinality_threshold=10,
                 zipfian_ratio=0.5,
-                small_data_threshold=500,
-                large_data_threshold=10000,
+                small_data_threshold=1000,
+                large_data_threshold=50000,
             ))
             profile = analyzer.analyze("data.csv")
             ```

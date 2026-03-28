@@ -181,3 +181,6 @@ profile_*.json
 
 # output
 output/*
+
+# MCP
+!docs/MCP_SETUP.md
