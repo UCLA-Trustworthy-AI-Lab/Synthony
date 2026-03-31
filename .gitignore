@@ -177,7 +177,7 @@ profile_*.json
 
 
 # MCP config file
-.mcp.json
-
+#.mcp.json
+:
 # output
 output/*

@@ -30,7 +30,9 @@ from mcp.types import (
     TextContent,
     ImageContent,
     EmbeddedResource,
+    GetPromptResult,
     LoggingLevel,
+    PromptMessage,
     Resource,
     Prompt,
     PromptArgument,
@@ -299,21 +301,31 @@ class SynthonyMCPServer:
             return prompts
 
         @self.server.get_prompt()
-        async def get_prompt(name: str, arguments: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+        async def get_prompt(name: str, arguments: Optional[Dict[str, str]] = None) -> GetPromptResult:
             """Get a prompt by name with optional arguments."""
             logger.info(f"Getting prompt: {name} with arguments: {arguments}")
 
             try:
                 result = await self.workflow_prompts.get_prompt(name, arguments or {})
-                return result
+                return GetPromptResult(
+                    description=result.get("description"),
+                    messages=[
+                        PromptMessage(role=m["role"], content=m["content"])
+                        for m in result["messages"]
+                    ]
+                )
 
             except Exception as e:
                 logger.error(f"Prompt retrieval error: {e}")
-                return {
-                    "error": str(e),
-                    "prompt": name,
-                    "arguments": arguments
-                }
+                return GetPromptResult(
+                    description=f"Error: {e}",
+                    messages=[
+                        PromptMessage(
+                            role="user",
+                            content=TextContent(type="text", text=f"Error retrieving prompt '{name}': {e}")
+                        )
+                    ]
+                )
 
     async def _read_guidelines(self, uri: str) -> Dict[str, Any]:
         """Read system guidelines from the active system prompt in database."""

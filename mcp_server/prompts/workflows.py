@@ -6,6 +6,8 @@ Guided workflows for common tasks.
 
 from typing import Any, Dict, List
 
+from mcp.types import TextContent
+
 
 class WorkflowPrompts:
     """
@@ -107,7 +109,9 @@ class WorkflowPrompts:
         messages = [
             {
                 "role": "user",
-                "content": f"""I need help selecting the best synthetic data generation model for my dataset.
+                "content": TextContent(
+                    type="text",
+                    text=f"""I need help selecting the best synthetic data generation model for my dataset.
 
 Dataset: {data_path}
 
@@ -123,6 +127,7 @@ Use the following tools in order:
 - rank_models_hybrid: To get model recommendations
 - explain_recommendation_reasoning: To generate detailed explanation
 """
+                )
             }
         ]
 
@@ -138,7 +143,9 @@ Use the following tools in order:
         messages = [
             {
                 "role": "user",
-                "content": f"""I want to understand why my dataset is considered a "hard problem" for synthesis.
+                "content": TextContent(
+                    type="text",
+                    text=f"""I want to understand why my dataset is considered a "hard problem" for synthesis.
 
 Dataset ID: {dataset_id}
 
@@ -159,6 +166,7 @@ Use the following resources and tools:
 - rank_models_hybrid: To see which models are suitable
 - explain_recommendation_reasoning: For detailed explanation
 """
+                )
             }
         ]
 
@@ -175,7 +183,9 @@ Use the following resources and tools:
         messages = [
             {
                 "role": "user",
-                "content": f"""I want to validate the recommended model against benchmark datasets.
+                "content": TextContent(
+                    type="text",
+                    text=f"""I want to validate the recommended model against benchmark datasets.
 
 Dataset ID: {dataset_id}
 Model: {model_name}
@@ -196,6 +206,7 @@ Use the following tools:
 - generate_benchmark_dataset: To create test datasets
 - benchmarks://results/{model_name}/{{dataset_type}}: To check existing results
 """
+                )
             }
         ]
 
@@ -211,7 +222,9 @@ Use the following tools:
         messages = [
             {
                 "role": "user",
-                "content": f"""I have new benchmark results that differ from expected model performance.
+                "content": TextContent(
+                    type="text",
+                    text=f"""I have new benchmark results that differ from expected model performance.
 
 Benchmark Results: {benchmark_results}
 
@@ -231,6 +244,7 @@ Use the following resources:
 Note: This workflow helps maintain the self-correcting feedback loop.
 SystemPrompt scores should reflect empirical evidence, not just theoretical expectations.
 """
+                )
             }
         ]
 

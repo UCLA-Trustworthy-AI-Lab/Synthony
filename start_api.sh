@@ -47,7 +47,7 @@ fi
 # Display configuration
 echo -e "${BLUE}Configuration:${NC}"
 echo "  Host: ${API_HOST:-0.0.0.0}"
-echo "  Port: ${API_PORT:-8000}"
+echo "  Port: ${API_PORT:-9090}"
 echo "  Reload: ${API_RELOAD:-true}"
 echo "  Workers: ${API_WORKERS:-1}"
 echo ""
@@ -102,9 +102,9 @@ echo ""
 
 # Display URLs
 echo -e "${GREEN}API will be available at:${NC}"
-echo "  Main API:      http://localhost:${API_PORT:-8000}"
-echo "  Swagger Docs:  http://localhost:${API_PORT:-8000}/docs"
-echo "  ReDoc:         http://localhost:${API_PORT:-8000}/redoc"
+echo "  Main API:      http://localhost:${API_PORT:-9090}"
+echo "  Swagger Docs:  http://localhost:${API_PORT:-9090}/docs"
+echo "  ReDoc:         http://localhost:${API_PORT:-9090}/redoc"
 echo ""
 
 # Create logs directory
@@ -115,9 +115,9 @@ case $MODE in
     prod)
         echo -e "${GREEN}Starting API server in production mode...${NC}"
         echo ""
-        uvicorn synthony.api.server:app \
+        python -m uvicorn synthony.api.server:app \
             --host ${API_HOST:-0.0.0.0} \
-            --port ${API_PORT:-8000} \
+            --port ${API_PORT:-9090} \
             --workers ${API_WORKERS:-4} \
             --log-level info
         ;;
@@ -128,9 +128,9 @@ case $MODE in
         echo "  Log file: $LOG_FILE"
         echo ""
 
-        uvicorn synthony.api.server:app \
+        python -m uvicorn synthony.api.server:app \
             --host ${API_HOST:-0.0.0.0} \
-            --port ${API_PORT:-8000} \
+            --port ${API_PORT:-9090} \
             --reload \
             > "$LOG_FILE" 2>&1 &
 
@@ -161,9 +161,9 @@ case $MODE in
         echo ""
         sleep 1
 
-        uvicorn synthony.api.server:app \
+        python -m uvicorn synthony.api.server:app \
             --host ${API_HOST:-0.0.0.0} \
-            --port ${API_PORT:-8000} \
+            --port ${API_PORT:-9090} \
             --reload \
             --log-level info
         ;;

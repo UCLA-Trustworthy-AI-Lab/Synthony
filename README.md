@@ -147,37 +147,39 @@ pip install -e ".[mcp]"
 python -m mcp_server.server --test
 ```
 
-**Connect to Claude Desktop (macOS):**
+**VSCode** (`.vscode/mcp.json`):
 
-```bash
-mkdir -p ~/Library/Application\ Support/Claude
-cat > ~/Library/Application\ Support/Claude/claude_desktop_config.json << 'EOF'
+```json
+{
+  "servers": {
+    "synthony": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "mcp_server.server"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
+```
+
+**Antigravity / Claude Desktop / Claude Code**:
+
+```json
 {
   "mcpServers": {
     "synthony": {
-      "command": "synthony-mcp",
+      "command": "python",
+      "args": ["-m", "mcp_server.server"],
+      "cwd": "/path/to/Synthony",
       "env": {
-        "SYNTHONY_DATA_DIR": "$(pwd)/dataset/input_data"
+        "PYTHONPATH": "/path/to/Synthony"
       }
     }
   }
 }
-EOF
 ```
 
-Then restart Claude Desktop. You can now ask Claude to analyze datasets and get recommendations:
-
-```
-"Analyze the Bean dataset and recommend the best synthetic data model"
-```
-
-**Connect to Other Agents:**
-
-- **Cline (VS Code)**: `.cline/config.json`
-- **Continue.dev (VS Code)**: `.continue/config.json`
-- **Cursor (AI Editor)**: Settings → MCP Servers
-
-For detailed setup instructions across all platforms, including Windows, Linux, npm installation, Docker, and troubleshooting: **See [MCP_SETUP.md](docs/MCP_SETUP.md)**
+For detailed setup instructions for all clients (VSCode, Antigravity, Claude Desktop, Claude Code, Cline, Continue.dev, Cursor), environment variables, and troubleshooting: **See [MCP_SETUP.md](docs/MCP_SETUP.md)**
 
 ## How It Works
 

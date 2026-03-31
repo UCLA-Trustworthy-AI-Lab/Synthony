@@ -60,9 +60,28 @@ Or using the installed command:
 synthony-mcp
 ```
 
-### Claude Code Integration
+### Client Integration
 
-Add to your Claude Code MCP settings:
+For detailed setup instructions for all supported clients (VSCode, Antigravity, Claude Desktop, Claude Code, Cline, Continue.dev, Cursor), see **[MCP_SETUP.md](../docs/MCP_SETUP.md)**.
+
+Quick examples:
+
+**VSCode** (`.vscode/mcp.json`):
+
+```json
+{
+  "servers": {
+    "synthony": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "mcp_server.server"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
+```
+
+**Antigravity / Claude Desktop / Claude Code**:
 
 ```json
 {
@@ -70,7 +89,10 @@ Add to your Claude Code MCP settings:
     "synthony": {
       "command": "python",
       "args": ["-m", "mcp_server.server"],
-      "cwd": "/path/to/Synthony"
+      "cwd": "/path/to/Synthony",
+      "env": {
+        "PYTHONPATH": "/path/to/Synthony"
+      }
     }
   }
 }

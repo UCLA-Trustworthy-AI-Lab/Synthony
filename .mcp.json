@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "synthony": {
+      "command": "python",
+      "args": ["-m", "mcp_server.server", "--verbose"],
+      "env": {
+        "PYTHONPATH": ".:src"
+      }
+    }
+  }
+}
