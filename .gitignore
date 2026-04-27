@@ -192,3 +192,10 @@ output/*
 # Poster
 !docs/poster/synthony_poster.tex
 !docs/poster/synthony_poster.pdf
+
+# Test result
+tests/TEST_EXECUTION_REPORT.md
+tests/TEST_SUITE_SUMMARY.md
+
+# PR
+PR_DESCRIPTION.md
