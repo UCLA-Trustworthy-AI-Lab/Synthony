@@ -170,6 +170,9 @@ cython_debug/
 Thumbs.db
 ._*
 
+# Workspace
+src/synthony/api/Synthony.code-workspace
+
 # Project-specific
 *.csv
 *.parquet
@@ -185,3 +188,7 @@ output/*
 # MCP
 !docs/MCP_SETUP.md
 !docs/SERVER_GUIDE.md
+
+# Poster
+!docs/poster/synthony_poster.tex
+!docs/poster/synthony_poster.pdf
