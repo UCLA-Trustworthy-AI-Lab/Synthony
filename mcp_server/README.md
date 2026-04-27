@@ -40,7 +40,7 @@ mcp_server/
 pip install "mcp>=0.9.0"
 ```
 
-1. Install Synthony with all dependencies:
+2. Install Synthony with all dependencies:
 
 ```bash
 pip install -e ".[all]"
@@ -80,14 +80,15 @@ Add to your Claude Code MCP settings:
 
 ### Profiling Tools
 
-#### `analyze_stress_profile`
+#### `synthony_analyze_stress_profile`
 
 Analyze a tabular dataset and extract stress profile.
 
 **Arguments:**
 
-- `data_path` (required): Path to CSV or Parquet file
-- `dataset_id` (optional): Identifier for caching
+- `dataset_name` (required if no `data_path`): Name of dataset in the configured data directory
+- `data_path` (required if no `dataset_name`): Absolute path to CSV or Parquet file
+- `dataset_id` (optional): Identifier for caching; defaults to the filename stem
 
 **Returns:**
 
@@ -107,7 +108,7 @@ Analyze a tabular dataset and extract stress profile.
 }
 ```
 
-#### `generate_benchmark_dataset`
+#### `synthony_generate_benchmark_dataset`
 
 Generate synthetic control datasets for validation.
 
@@ -124,15 +125,13 @@ Generate synthetic control datasets for validation.
 
 ### Model Tools
 
-#### `check_model_constraints`
+#### `synthony_check_model_constraints`
 
 Check which models satisfy given constraints.
 
 **Arguments:**
 
-- `cpu_only` (optional): CPU-only constraint
-- `strict_dp` (optional): Differential privacy requirement
-- `row_count` (optional): Dataset row count
+- `row_count` (optional): Dataset row count for size-based filtering
 
 **Returns:**
 
@@ -140,7 +139,7 @@ Check which models satisfy given constraints.
 - Excluded models with reasons
 - Constraints applied
 
-#### `get_model_info`
+#### `synthony_get_model_info`
 
 Get detailed information about a specific model.
 
@@ -154,7 +153,77 @@ Get detailed information about a specific model.
 - Capabilities (0-4 scores)
 - Constraints and limitations
 
-#### `list_models`
+#### `synthony_update_system_prompt`
+
+Regenerate `config/SystemPrompt.md` from the current `model_capabilities.json` scores and store it as a new versioned entry in the SQLite database.
+
+**Arguments:**
+
+- `version` (required): Version label for the new prompt (e.g. `"v6.0"`, `"v5.1"`)
+- `set_active` (optional): Set as active in the database (default: `true`)
+- `version_note` (optional): Note describing what changed
+
+**Returns:**
+
+- `version`, `capabilities_version`, `prompt_id`, `content_length`, `written_to`, `db_stored`, `sections_regenerated`, `sections_preserved`
+
+**Regenerated sections** (dynamic, from JSON):
+- Section 1: Knowledge base capability table
+- Section 2: Model tiers by quality score
+- Section 3: GPU handling table
+- Section 7: Quick reference by use case
+
+**Preserved sections** (static):
+- Section 4: Score change history
+- Sections 5–6: Decision logic and output format
+- Sections 8–10: Examples, availability check, validation notes
+
+**Typical workflow** (run after `synthony_update_model_capabilities`):
+```json
+{
+  "name": "synthony_update_system_prompt",
+  "arguments": {
+    "version": "v6.0",
+    "set_active": true,
+    "version_note": "Sync from model_capabilities.json v7.0.2"
+  }
+}
+```
+
+#### `synthony_update_model_capabilities`
+
+Update capability scores and/or empirical benchmark metrics for a model in `model_capabilities.json`. Writes both `src/` and `config/` copies and bumps the patch version.
+
+**Arguments:**
+
+- `model_name` (required): Model to update (e.g., `"ARF"`, `"TabDDPM"`)
+- `capabilities` (optional): Object of capability scores to set. Keys: `skew_handling`, `cardinality_handling`, `zipfian_handling`, `small_data`, `correlation_handling`, `privacy_dp`. Values: integer 0–4.
+- `spark_empirical` (optional): Object of empirical metrics to update. Float keys (0–1): `avg_quality_score`, `avg_fidelity`, `avg_utility`, `skew_preservation`, `cardinality_preservation`, `correlation_preservation`. Integer key: `datasets_tested`.
+- `auto_calculate` (optional): If `true`, derives capability scores from the updated `spark_empirical` values using the standard scoring thresholds (≥0.90→4, ≥0.75→3, ≥0.50→2, ≥0.25→1, else 0).
+- `version_note` (optional): Text appended to `metadata.source` describing what changed.
+
+**Returns:**
+
+- `model_name`, `version` (before/after), `last_updated`, `changes` diff, `current_capabilities`, `written_to` paths
+
+**Example:**
+
+```json
+{
+  "name": "synthony_update_model_capabilities",
+  "arguments": {
+    "model_name": "ARF",
+    "spark_empirical": {
+      "skew_preservation": 0.81,
+      "datasets_tested": 14
+    },
+    "auto_calculate": true,
+    "version_note": "Updated skew score from 2 new benchmark runs on skewed datasets"
+  }
+}
+```
+
+#### `synthony_list_models`
 
 List all available models with optional filtering.
 
@@ -171,15 +240,14 @@ List all available models with optional filtering.
 
 ### Recommendation Tools
 
-#### `rank_models_hybrid`
+#### `synthony_rank_models_hybrid`
 
 Rank models using hybrid rule-based + LLM approach.
 
 **Arguments:**
 
-- `dataset_profile` (required): Profile from `analyze_stress_profile`
+- `dataset_profile` (required): Profile from `synthony_analyze_stress_profile`
 - `column_analysis` (optional): Column-level analysis
-- `constraints` (optional): Hard constraints (cpu_only, strict_dp)
 - `method` (optional): `rule_based`, `llm`, or `hybrid` (default)
 - `top_n` (optional): Number of alternatives (default: 3)
 
@@ -189,7 +257,7 @@ Rank models using hybrid rule-based + LLM approach.
 - Alternative models
 - Reasoning and warnings
 
-#### `get_tie_breaker_logic`
+#### `synthony_get_tie_breaker_logic`
 
 Resolve ties when top models score within 5%.
 
@@ -197,7 +265,6 @@ Resolve ties when top models score within 5%.
 
 - `tied_models` (required): List of model names
 - `dataset_profile` (required): Dataset profile
-- `prefer_speed` (optional): Prioritize faster models
 
 **Returns:**
 
@@ -205,13 +272,13 @@ Resolve ties when top models score within 5%.
 - Reasoning
 - Rule applied
 
-#### `explain_recommendation_reasoning`
+#### `synthony_explain_recommendation_reasoning`
 
 Generate user-friendly explanation for recommendation.
 
 **Arguments:**
 
-- `recommendation_result` (required): Result from `rank_models_hybrid`
+- `recommendation_result` (required): Result from `synthony_rank_models_hybrid`, `synthony_rank_models_rule`, or `synthony_rank_models_llm`
 - `dataset_profile` (required): Dataset profile
 - `detail_level` (optional): `brief`, `detailed`, or `technical`
 
@@ -403,12 +470,14 @@ The MCP server integrates with the three-package architecture:
 
 ### "No active system prompt found"
 
-# Via API
+Upload a system prompt via the REST API (requires the FastAPI server to be running):
 
-curl -X POST <http://localhost:8000/systemprompt/upload> \
+```bash
+curl -X POST http://localhost:8000/systemprompt/upload \
   -F "file=@docs/SystemPrompt_v3.md" \
   -F "version=v3.0" \
   -F "set_active=true"
+```
 
 ### Import errors
 

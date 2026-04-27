@@ -7,7 +7,7 @@ Tools for hybrid rule-based + LLM recommendation engine.
 import json
 from typing import Any, Dict, List, Optional
 
-from mcp.types import Tool
+from mcp.types import Tool, ToolAnnotations
 
 from synthony.core.schemas import DatasetProfile, ColumnAnalysisResult
 from synthony.recommender.engine import ModelRecommendationEngine, RecommendationResult
@@ -30,18 +30,18 @@ class RecommendationTools:
     def get_tool_names(self) -> List[str]:
         """Get list of tool names."""
         return [
-            "rank_models_hybrid",
-            "rank_models_rule",
-            "rank_models_llm",
-            "get_tie_breaker_logic",
-            "explain_recommendation_reasoning",
+            "synthony_rank_models_hybrid",
+            "synthony_rank_models_rule",
+            "synthony_rank_models_llm",
+            "synthony_get_tie_breaker_logic",
+            "synthony_explain_recommendation_reasoning",
         ]
 
     def get_tool_definitions(self) -> List[Tool]:
         """Get MCP tool definitions."""
         return [
             Tool(
-                name="rank_models_hybrid",
+                name="synthony_rank_models_hybrid",
                 description=(
                     "Rank synthesis models using hybrid rule-based + LLM approach. "
                     "Process: "
@@ -57,7 +57,7 @@ class RecommendationTools:
                     "properties": {
                         "dataset_profile": {
                             "type": "object",
-                            "description": "Dataset stress profile from analyze_stress_profile tool"
+                            "description": "Dataset stress profile from synthony_analyze_stress_profile tool"
                         },
                         "column_analysis": {
                             "type": "object",
@@ -78,10 +78,16 @@ class RecommendationTools:
                         }
                     },
                     "required": ["dataset_profile"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=False,
+                    openWorldHint=True,
+                )
             ),
             Tool(
-                name="rank_models_rule",
+                name="synthony_rank_models_rule",
                 description=(
                     "Rank synthesis models using ONLY rule-based approach (pure Python, no LLM). "
                     "Process: "
@@ -97,7 +103,7 @@ class RecommendationTools:
                     "properties": {
                         "dataset_profile": {
                             "type": "object",
-                            "description": "Dataset stress profile from analyze_stress_profile tool"
+                            "description": "Dataset stress profile from synthony_analyze_stress_profile tool"
                         },
                         "column_analysis": {
                             "type": "object",
@@ -112,10 +118,16 @@ class RecommendationTools:
                         }
                     },
                     "required": ["dataset_profile"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                )
             ),
             Tool(
-                name="rank_models_llm",
+                name="synthony_rank_models_llm",
                 description=(
                     "Rank synthesis models using ONLY LLM-based approach (requires OpenAI API). "
                     "Process: "
@@ -131,7 +143,7 @@ class RecommendationTools:
                     "properties": {
                         "dataset_profile": {
                             "type": "object",
-                            "description": "Dataset stress profile from analyze_stress_profile tool"
+                            "description": "Dataset stress profile from synthony_analyze_stress_profile tool"
                         },
                         "column_analysis": {
                             "type": "object",
@@ -146,10 +158,16 @@ class RecommendationTools:
                         }
                     },
                     "required": ["dataset_profile"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=False,
+                    openWorldHint=True,
+                )
             ),
             Tool(
-                name="get_tie_breaker_logic",
+                name="synthony_get_tie_breaker_logic",
                 description=(
                     "Get tie-breaking logic when top models score within 5%. "
                     "Rules: "
@@ -172,10 +190,16 @@ class RecommendationTools:
                         }
                     },
                     "required": ["tied_models", "dataset_profile"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                )
             ),
             Tool(
-                name="explain_recommendation_reasoning",
+                name="synthony_explain_recommendation_reasoning",
                 description=(
                     "Generate user-friendly explanation for model recommendation. "
                     "Translates technical decision (e.g., 'Selected ARF due to Small Data') "
@@ -184,14 +208,14 @@ class RecommendationTools:
                     "- What dataset characteristics drove the decision "
                     "- Trade-offs vs alternatives "
                     "- Expected performance characteristics "
-                    "Uses LLM to generate natural language explanation."
+                    "Does not call an external LLM; generates explanation from the recommendation result."
                 ),
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "recommendation_result": {
                             "type": "object",
-                            "description": "Result from rank_models_hybrid or recommend endpoint"
+                            "description": "Result from synthony_rank_models_hybrid, synthony_rank_models_rule, or synthony_rank_models_llm"
                         },
                         "dataset_profile": {
                             "type": "object",
@@ -205,21 +229,27 @@ class RecommendationTools:
                         }
                     },
                     "required": ["recommendation_result", "dataset_profile"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                )
             ),
         ]
 
     async def execute_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a recommendation tool."""
-        if name == "rank_models_hybrid":
+        if name == "synthony_rank_models_hybrid":
             return await self._rank_models_hybrid(arguments)
-        elif name == "rank_models_rule":
+        elif name == "synthony_rank_models_rule":
             return await self._rank_models_rule(arguments)
-        elif name == "rank_models_llm":
+        elif name == "synthony_rank_models_llm":
             return await self._rank_models_llm(arguments)
-        elif name == "get_tie_breaker_logic":
+        elif name == "synthony_get_tie_breaker_logic":
             return await self._get_tie_breaker_logic(arguments)
-        elif name == "explain_recommendation_reasoning":
+        elif name == "synthony_explain_recommendation_reasoning":
             return await self._explain_recommendation_reasoning(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")

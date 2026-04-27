@@ -6,7 +6,7 @@ Tools for comparing original and synthetic datasets using quality metrics.
 
 from typing import Any, Dict, List
 
-from mcp.types import Tool
+from mcp.types import Tool, ToolAnnotations
 
 from synthony.benchmark.metrics import DataQualityBenchmark
 from synthony.core.loaders import DataLoader
@@ -26,13 +26,13 @@ class BenchmarkTools:
 
     def get_tool_names(self) -> List[str]:
         """Get list of tool names."""
-        return ["benchmark_compare"]
+        return ["synthony_benchmark_compare"]
 
     def get_tool_definitions(self) -> List[Tool]:
         """Get MCP tool definitions."""
         return [
             Tool(
-                name="benchmark_compare",
+                name="synthony_benchmark_compare",
                 description=(
                     "Compare original and synthetic datasets to measure data quality. "
                     "Computes fidelity (mean/std/correlation preservation), "
@@ -60,13 +60,19 @@ class BenchmarkTools:
                         },
                     },
                     "required": ["original_path", "synthetic_path"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                )
             ),
         ]
 
     async def execute_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a benchmark tool."""
-        if name == "benchmark_compare":
+        if name == "synthony_benchmark_compare":
             return await self._benchmark_compare(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")

@@ -161,7 +161,7 @@ The registry also stores all engine configuration:
 |----------|---------|
 | `SYNTHONY_DATA_DIR` | Dataset directory (default: `dataset/input_data`) |
 | `OPENAI_API_KEY` | Required for LLM-based recommendations |
-| `MCP_DEBUG` | Enable verbose MCP server logging |
+| `MCP_DEBUG` | Set to any non-empty value to enable verbose MCP server logging (equivalent to `--verbose` flag) |
 
 ## Key Files
 
@@ -181,20 +181,26 @@ The MCP server exposes tools for AI agents:
 
 | Tool | Purpose |
 |------|---------|
-| `list_datasets` | Discover datasets in configured directory |
-| `load_dataset` | Load and preview dataset metadata |
-| `analyze_stress_profile` | Profile dataset stress factors |
-| `rank_models_hybrid` | Get recommendations (rule + LLM) |
-| `rank_models_rule` | Rule-based recommendations only |
-| `rank_models_llm` | LLM-based recommendations only |
-| `benchmark_compare` | Compare synthetic vs original data quality |
-| `get_model_info` | Model capabilities and constraints |
-| `check_model_constraints` | Validate model compatibility |
-| `explain_recommendation_reasoning` | Explain why a model was recommended |
+| `synthony_list_datasets` | Discover datasets in configured directory |
+| `synthony_load_dataset` | Load and preview dataset metadata |
+| `synthony_analyze_stress_profile` | Profile dataset stress factors |
+| `synthony_rank_models_hybrid` | Get recommendations (rule + LLM) |
+| `synthony_rank_models_rule` | Rule-based recommendations only |
+| `synthony_rank_models_llm` | LLM-based recommendations only |
+| `synthony_benchmark_compare` | Compare synthetic vs original data quality |
+| `synthony_get_model_info` | Model capabilities and constraints |
+| `synthony_check_model_constraints` | Validate model compatibility (row count) |
+| `synthony_get_tie_breaker_logic` | Resolve ties when top models score within 5% |
+| `synthony_explain_recommendation_reasoning` | Explain why a model was recommended |
+| `synthony_generate_benchmark_dataset` | Create test datasets with known stress |
+| `synthony_list_models` | List all 15 models with optional type filter |
+| `synthony_update_model_capabilities` | Update capability scores / empirical metrics in model_capabilities.json |
+| `synthony_update_system_prompt` | Regenerate SystemPrompt.md from current model_capabilities.json scores, store in DB |
 
 Test MCP protocol:
 ```bash
 echo '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":1}' | python -m mcp_server.server
+# Tool names now use synthony_ prefix (e.g. synthony_analyze_stress_profile)
 ```
 
 ## Python API Usage

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
-from mcp.types import Tool
+from mcp.types import Tool, ToolAnnotations
 
 from synthony.utils.constants import DATA_DIR
 
@@ -30,15 +30,15 @@ class DataTools:
     def get_tool_names(self) -> List[str]:
         """Get list of tool names."""
         return [
-            "list_datasets",
-            "load_dataset",
+            "synthony_list_datasets",
+            "synthony_load_dataset",
         ]
 
     def get_tool_definitions(self) -> List[Tool]:
         """Get MCP tool definitions."""
         return [
             Tool(
-                name="list_datasets",
+                name="synthony_list_datasets",
                 description=(
                     "List available datasets in the configured data directory. "
                     "Returns dataset names, formats (CSV/Parquet), and file sizes. "
@@ -55,14 +55,20 @@ class DataTools:
                             "default": "all"
                         }
                     }
-                }
+                },
+                annotations=ToolAnnotations(
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                )
             ),
             Tool(
-                name="load_dataset",
+                name="synthony_load_dataset",
                 description=(
                     "Load a dataset by name from the configured data directory. "
                     "Returns dataset metadata (shape, columns, dtypes, memory usage) "
-                    "and a preview of the first rows. Use this tool after list_datasets "
+                    "and a preview of the first rows. Use this tool after synthony_list_datasets "
                     "to inspect a specific dataset before running analysis."
                 ),
                 inputSchema={
@@ -86,15 +92,21 @@ class DataTools:
                         }
                     },
                     "required": ["dataset_name"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                )
             ),
         ]
 
     async def execute_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a data tool."""
-        if name == "list_datasets":
+        if name == "synthony_list_datasets":
             return await self._list_datasets(arguments)
-        elif name == "load_dataset":
+        elif name == "synthony_load_dataset":
             return await self._load_dataset(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")

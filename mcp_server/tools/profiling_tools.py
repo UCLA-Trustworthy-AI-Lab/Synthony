@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
-from mcp.types import Tool
+from mcp.types import Tool, ToolAnnotations
 
 from synthony.core.analyzer import StochasticDataAnalyzer
 from synthony.core.column_analyzer import ColumnAnalyzer
@@ -38,22 +38,22 @@ class ProfilingTools:
     def get_tool_names(self) -> List[str]:
         """Get list of tool names."""
         return [
-            "analyze_stress_profile",
-            "generate_benchmark_dataset",
+            "synthony_analyze_stress_profile",
+            "synthony_generate_benchmark_dataset",
         ]
 
     def get_tool_definitions(self) -> List[Tool]:
         """Get MCP tool definitions."""
         return [
             Tool(
-                name="analyze_stress_profile",
+                name="synthony_analyze_stress_profile",
                 description=(
                     "Analyze a tabular dataset (CSV or Parquet) and extract stress profile. "
                     "Returns dataset-level metrics (skewness, cardinality, zipfian ratio, correlation) "
                     "and column-level analysis (per-column stress factors, difficulty scores). "
                     "Use this tool when you need to understand dataset characteristics before "
                     "recommending a synthesis model. "
-                    "Provide either 'dataset_name' (resolves from configured data directory) "
+                    "Requires exactly one of: 'dataset_name' (resolves from configured data directory) "
                     "or 'data_path' (absolute file path)."
                 ),
                 inputSchema={
@@ -61,21 +61,31 @@ class ProfilingTools:
                     "properties": {
                         "dataset_name": {
                             "type": "string",
-                            "description": "Name of dataset in configured data directory (e.g., 'Bean', 'Titanic')"
+                            "description": "Name of dataset in configured data directory (e.g., 'Bean', 'Titanic'). Use synthony_list_datasets to discover available names."
                         },
                         "data_path": {
                             "type": "string",
-                            "description": "Absolute path to CSV or Parquet file (alternative to dataset_name)"
+                            "description": "Absolute path to CSV or Parquet file. Use instead of dataset_name for files outside the data directory."
                         },
                         "dataset_id": {
                             "type": "string",
-                            "description": "Optional identifier for this dataset (for caching)"
+                            "description": "Optional identifier for caching; defaults to the filename stem"
                         }
-                    }
-                }
+                    },
+                    "anyOf": [
+                        {"required": ["dataset_name"]},
+                        {"required": ["data_path"]}
+                    ]
+                },
+                annotations=ToolAnnotations(
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                )
             ),
             Tool(
-                name="generate_benchmark_dataset",
+                name="synthony_generate_benchmark_dataset",
                 description=(
                     "Generate synthetic control datasets for model validation. "
                     "Creates test datasets with known stress characteristics: "
@@ -103,15 +113,21 @@ class ProfilingTools:
                         }
                     },
                     "required": ["dataset_type", "output_path"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    readOnlyHint=False,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                )
             ),
         ]
 
     async def execute_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a profiling tool."""
-        if name == "analyze_stress_profile":
+        if name == "synthony_analyze_stress_profile":
             return await self._analyze_stress_profile(arguments)
-        elif name == "generate_benchmark_dataset":
+        elif name == "synthony_generate_benchmark_dataset":
             return await self._generate_benchmark_dataset(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")
