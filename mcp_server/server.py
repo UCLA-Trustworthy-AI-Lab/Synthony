@@ -69,10 +69,11 @@ class SynthonyMCPServer:
         """Initialize the MCP server with Synthony components.
 
         Args:
-            verbose: If True, log all tool commands and JSON outputs to console
+            verbose: If True, log all tool commands and JSON outputs to stderr.
+                     Also enabled by setting the MCP_DEBUG environment variable.
         """
-        self.server = Server("synthony")
-        self.verbose = verbose
+        self.server = Server("synthony_mcp")
+        self.verbose = verbose or bool(os.getenv("MCP_DEBUG"))
 
         # Initialize Synthony core components
         self.analyzer = StochasticDataAnalyzer()
@@ -186,26 +187,15 @@ class SynthonyMCPServer:
 
             except Exception as e:
                 logger.error(f"Tool execution error: {e}")
-                error_result = {
-                    "error": str(e),
-                    "tool": name,
-                    "arguments": arguments
-                }
 
                 # Verbose logging: Print error
                 if self.verbose:
                     print(f"\n{'!'*80}", file=sys.stderr)
-                    print(f"[VERBOSE] Tool Error: {name}", file=sys.stderr)
-                    print(f"[VERBOSE] Error:", file=sys.stderr)
-                    print(json.dumps(error_result, indent=2), file=sys.stderr)
+                    print(f"[VERBOSE] Tool Error: {name} — {e}", file=sys.stderr)
                     print(f"{'!'*80}\n", file=sys.stderr)
 
-                return [
-                    TextContent(
-                        type="text",
-                        text=json.dumps(error_result, indent=2)
-                    )
-                ]
+                # Re-raise so the MCP framework returns isError=True in the protocol response
+                raise
 
         # Resources handlers
         @self.server.list_resources()

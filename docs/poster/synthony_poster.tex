@@ -1,0 +1,298 @@
+% SYNTHONY — Academic One-Pager Poster
+% UCLA Trustworthy AI Lab | ICLR 2026 DeLTa Workshop
+% Compile: pdflatex synthony_poster.tex
+
+\documentclass[8pt]{article}
+
+% ─── Layout ──────────────────────────────────────────────────────────────────
+\usepackage[
+  a4paper, landscape,
+  top=0.4cm, bottom=0.4cm,
+  left=0.5cm, right=0.5cm
+]{geometry}
+\usepackage{multicol}
+\setlength{\columnsep}{0.4cm}
+\setlength{\columnseprule}{0.3pt}
+
+% ─── Fonts ───────────────────────────────────────────────────────────────────
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+
+% ─── Math ────────────────────────────────────────────────────────────────────
+\usepackage{amsmath,amssymb}
+\setlength{\abovedisplayskip}{2pt}
+\setlength{\belowdisplayskip}{2pt}
+\setlength{\abovedisplayshortskip}{1pt}
+\setlength{\belowdisplayshortskip}{1pt}
+
+% ─── Color & Graphics ────────────────────────────────────────────────────────
+\usepackage[table]{xcolor}
+\usepackage{graphicx}
+
+\definecolor{UCLABlue}{HTML}{2774AE}
+\definecolor{UCLADark}{HTML}{003B5C}
+\definecolor{UCLAGold}{HTML}{FFD100}
+\definecolor{BoxBg}{HTML}{EEF4FB}
+\definecolor{MidGray}{HTML}{F0F0F0}
+\definecolor{LightGold}{HTML}{FFF7CC}
+
+% ─── Tables ──────────────────────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{colortbl}
+
+% ─── Lists ───────────────────────────────────────────────────────────────────
+\usepackage{enumitem}
+\setlist{nosep, leftmargin=1em, topsep=0pt, itemsep=0pt, parsep=0pt}
+
+% ─── Spacing ─────────────────────────────────────────────────────────────────
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+
+% ─── Macros ──────────────────────────────────────────────────────────────────
+% Section heading
+\newcommand{\postersec}[1]{%
+  \vspace{2pt}%
+  \noindent\colorbox{UCLABlue}{\makebox[\dimexpr\linewidth-2\fboxsep]{\color{white}\textbf{\small\strut#1}}}%
+  \vspace{1pt}%
+}
+
+% Inline colored box — fixed width = \linewidth
+\newcommand{\infobox}[2][BoxBg]{%
+  \vspace{1pt}%
+  \noindent\colorbox{#1}{\begin{minipage}{\dimexpr\linewidth-2\fboxsep-2\fboxrule}%
+    \vspace{2pt}#2\vspace{2pt}%
+  \end{minipage}}%
+  \vspace{1pt}%
+}
+
+\newcommand{\hrulefull}{\vspace{1pt}\noindent{\color{UCLABlue!30}\rule{\linewidth}{0.4pt}}\vspace{1pt}}
+
+\pagestyle{empty}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\begin{document}
+% ═════════════════════════════════════════════════════════════════════════════
+
+%% ── TITLE BANNER ─────────────────────────────────────────────────────────────
+\noindent\colorbox{UCLADark}{\begin{minipage}{\dimexpr\linewidth-2\fboxsep}
+  \vspace{2pt}
+  \centering
+  {\color{white}\normalsize\textbf{SYNTHONY: A Stress-Aware, Intent-Conditioned Agent for Deep Tabular Generative Model Selection}}\\[1pt]
+  {\color{white}\small
+    Hochan Son$^*$ \enspace Xiaofeng Lin$^*$ \enspace Jason Ni$^*$ \enspace Guang Cheng$^*$ \enspace
+    {\color{UCLAGold!90}\small($^*$UCLA Trustworthy AI Lab)}}\\[0.5pt]
+  {\color{UCLAGold}\footnotesize
+    ICLR 2026 — 2nd DeLTa Workshop on Deep Generative Models in Machine Learning \quad
+    \texttt{openreview.net/forum?id=cj4SNumWqf}}
+  \vspace{2pt}
+\end{minipage}}
+
+\vspace{2pt}
+
+%% ── THREE COLUMNS ────────────────────────────────────────────────────────────
+\begin{multicols}{3}
+
+%% ════ COLUMN 1 ════════════════════════════════════════════════════════════════
+
+\postersec{1. Problem Statement}
+
+{\small Selecting a synthetic tabular data model is a \textbf{non-trivial combinatorial problem}. Fifteen SOTA model families exhibit sharply different failure modes under dataset-specific ``\textbf{stress factors}'':}
+
+\vspace{2pt}
+{\footnotesize
+\begin{tabular}{@{}lp{2.3cm}@{}}
+  \toprule
+  \rowcolor{UCLADark}\color{white}\textbf{Family} & \color{white}\textbf{Failure Mode}\\
+  \midrule
+  GAN (CTGAN)  & Severe skewness\\
+  VAE (TVAE)   & High cardinality\\
+  LLM (GReaT)  & Large data ($>$50k rows)\\
+  Diffusion    & Small data ($<$1k rows)\\
+  Tree-based   & Complex correlations\\
+  \bottomrule
+\end{tabular}}
+
+\vspace{1pt}
+{\small No existing framework conditions model selection on all five stress properties \textit{jointly}. Practitioners default to trial-and-error, wasting compute and producing irreproducible choices.}
+
+\hrulefull
+
+\postersec{2. Stress Factor Formalization}
+
+{\footnotesize Given $\mathcal{D} \in \mathbb{R}^{n \times p}$, we extract
+$\mathbf{s}(\mathcal{D}) \in \{0,1\}^5$:}
+
+\infobox[BoxBg]{%
+  \footnotesize
+  \textbf{Skewness:} $s_{\text{sk}} = \mathbf{1}[\max_j |\hat{\gamma}_j| > 2.0]$,\;
+  $\hat{\gamma}_j = \hat{\mu}_3^{(j)}/(\hat{\sigma}_j)^3$\\[1pt]
+  \textbf{Cardinality:} $s_{\text{ca}} = \mathbf{1}[\max_j |\mathcal{V}_j| > 500]$\\[1pt]
+  \textbf{Zipfian:} $s_{\text{zi}} = \mathbf{1}[\exists j: r_{0.2}^{(j)} > 0.80]$
+  \;($r_{0.2}$= top-20\% mass)\\[1pt]
+  \textbf{Size:} $s_{\text{sm}} = \mathbf{1}[n{<}1000]$,\;
+  $s_{\text{lg}} = \mathbf{1}[n{>}50000]$
+}
+
+\hrulefull
+
+\postersec{3. Novel Contributions}
+
+{\small
+\begin{enumerate}
+  \item \textbf{First stress-aware selection} framework jointly mapping five dataset statistics to model capabilities via an empirically calibrated registry.
+  \item \textbf{Density-normalized cardinality} (Def.~2): corrects row-count sampling bias absent from all prior benchmarks.
+  \item \textbf{Intent-conditioned weighting}: user-specified targets (privacy/fidelity/speed) without retraining models.
+  \item \textbf{Hybrid symbolic + LLM engine}: hard filters guarantee constraint compliance; LLM resolves ambiguous trade-offs.
+  \item \textbf{Self-correcting MCP loop}: benchmark results propagate into registry \emph{and} LLM prompt atomically.
+\end{enumerate}
+}
+
+%% ════ COLUMN 2 ════════════════════════════════════════════════════════════════
+
+\postersec{4. Recommendation Engine Pipeline}
+
+{\small\textbf{Stage 1 — Hard Filters.}}
+
+{\footnotesize
+\vspace{-2pt}
+\[
+  \mathcal{M}' = \mathcal{M}
+    \setminus \{m{:}\,\texttt{cpu\_only} \wedge r_m^{\text{gpu}}\}
+    \setminus \{m{:}\,\texttt{strict\_dp} \wedge c_{m}^{\text{dp}} < \tau_{\text{dp}}\}
+\]
+$\tau_{\text{dp}}=3$ loaded from registry metadata.}
+
+\vspace{1pt}{\small\textbf{Stage 2 — Hard Problem Routing.}}
+
+\infobox[BoxBg]{%
+\footnotesize
+\textbf{Def.~1:} $\text{HP}(\mathcal{D}) = s_{\text{sk}} \wedge s_{\text{ca}} \wedge s_{\text{zi}} \in \{0,1\}$\\[1pt]
+When $\text{HP}=1$: route to \texttt{GReaT} (conf=0.95), fallback \texttt{TabDDPM}/\texttt{ARF}.
+}
+
+\vspace{1pt}{\small\textbf{Stage 3 — Capability Scoring.}}
+
+\infobox[BoxBg]{%
+\footnotesize
+\textbf{Def.~2 (Density-Norm.\ Cardinality):}
+\[
+  \hat{c}_{\text{ca}}^{(m)} = \frac{|\mathcal{V}^{\text{synth}}|/n^{\text{synth}}}{|\mathcal{V}^{\text{orig}}|/n^{\text{orig}}}
+\]
+\textbf{Def.~3 (Capability Score):} $c_{m,d} \in \{0,\ldots,4\}$, $w_d$=intent weight.
+\[
+  \text{Score}(m) = \sum_{d=1}^{D} w_d \cdot c_{m,d} \cdot \delta_d(m)
+\]
+Rank-decay: $\delta_d(m) \in \{1.0,\,0.7,\,0.4,\,0.0\}$\\[1pt]
+\textbf{Def.~4 (Empirical Bonus):}
+\[
+  \text{Score}^+(m) = \text{Score}(m) + 0.3\cdot q_m
+\]
+$q_m$ = avg.\ quality from 10-dataset spark benchmarks.
+}
+
+\vspace{1pt}{\small\textbf{Stage 4 — Tie-Breaking.}}
+
+{\footnotesize When $|\text{Score}^+(m_i){-}\text{Score}^+(m_j)| \leq 0.05\cdot\text{Score}^+(m_i)$:
+\[
+  m^* = \arg\max_{m\in\mathcal{T}}\,\pi_\theta(m),\quad \theta\in\{\text{gpu},\text{cpu},\text{speed},\text{small}\}
+\]
+}
+
+{\small\textbf{Stage 5 — LLM Fusion (hybrid).}}
+{\footnotesize Symbolic scores merged with GPT-4o rankings conditioned on SystemPrompt$_{v6.0}$, which encodes the full capability matrix.}
+
+\hrulefull
+
+\postersec{5. Self-Correcting Feedback Loop}
+
+\infobox[MidGray]{%
+\footnotesize
+\textbf{MCP pipeline:} Benchmark $\to$ \texttt{update\_capabilities} $\to$ \texttt{update\_system\_prompt} $\to$ Engine\\[1pt]
+Both the rule-based registry \emph{and} LLM prompt are updated atomically from the same JSON source of truth, eliminating prompt-registry divergence.
+}
+
+%% ════ COLUMN 3 ════════════════════════════════════════════════════════════════
+
+\postersec{6. Model Registry (v7.0.2, 13 Benchmarked)}
+
+{\tiny Scores 0–4; \textbf{bold}=4; $q$=avg quality score; Sk=Skew, Ca=Card, Zi=Zipf, Sm=Small, Co=Corr; †literature.}
+\vspace{1pt}
+
+{\footnotesize
+\begin{tabular}{@{}l@{\;}c@{\;}c@{\;}c@{\;}c@{\;}c@{\;}c@{\;}r@{}}
+  \toprule
+  \rowcolor{UCLADark}
+  {\color{white}\textbf{Model}} & {\color{white}Sk} & {\color{white}Ca} & {\color{white}Zi} & {\color{white}Sm} & {\color{white}Co} & {\color{white}DP} & {\color{white}$q$}\\
+  \midrule
+  CART       & 3 & \textbf{4} & 2 & \textbf{4} & \textbf{4} & 0 & .981\\
+  SMOTE      & 3 & \textbf{4} & 2 & \textbf{4} & \textbf{4} & 0 & .979\\
+  BayesNet   & 3 & \textbf{4} & 2 & \textbf{4} & 3 & 0 & .971\\
+  ARF        & 2 & \textbf{4} & 3 & \textbf{4} & \textbf{4} & 0 & .962\\
+  NFlow      & 2 & \textbf{4} & 2 & \textbf{4} & 1 & 0 & .915\\
+  TVAE       & 2 & \textbf{4} & 1 & 3 & \textbf{4} & 0 & .865\\
+  TabSyn     & 2 & \textbf{4} & 3 & 3 & 2 & 0 & .848\\
+  CTGAN      & 1 & \textbf{4} & 2 & 2 & 3 & 0 & .809\\
+  DPCART     & 2 & 0 & 2 & 2 & 3 & 3 & .759\\
+  TabDDPM    & 1 & 2 & 2 & 2 & 3 & 0 & .697\\
+  AutoDiff   & 1 & 3 & 2 & 2 & 1 & 0 & .634\\
+  AIM        & 3 & 0 & 1 & 2 & 3 & \textbf{4} & .540\\
+  PATECTGAN  & 0 & \textbf{4} & 2 & 1 & 0 & \textbf{4} & .455\\
+  \rowcolor{MidGray}
+  GReaT†     & \textbf{4} & \textbf{4} & \textbf{4} & 2 & 3 & 0 & —\\
+  \bottomrule
+\end{tabular}}
+
+\hrulefull
+
+\postersec{7. Empirical Results}
+
+{\footnotesize
+\begin{tabular}{@{}lcc@{}}
+  \toprule
+  \rowcolor{UCLADark}
+  {\color{white}\textbf{Method}} & {\color{white}\textbf{Top-1}} & {\color{white}\textbf{Top-3}}\\
+  \midrule
+  Random           & 0.12 & 0.35\\
+  Static Heuristic & 0.41 & 0.63\\
+  Vanilla LLM      & 0.53 & 0.71\\
+  \rowcolor{BoxBg}\textbf{Synthony (Rule)}   & \textbf{0.74} & \textbf{0.91}\\
+  \rowcolor{BoxBg}\textbf{Synthony (Hybrid)} & \textbf{0.79} & \textbf{0.94}\\
+  \bottomrule
+  \multicolumn{3}{@{}l@{}}{\tiny 10-dataset spark benchmark; abalone ground truth overlap: 100\%.}
+\end{tabular}}
+
+\hrulefull
+
+\postersec{8. Conclusions \& Future Work}
+
+{\small Synthony shows that \textbf{stress-aware, data-conditioned} model selection strongly outperforms random and static baselines. The hybrid architecture—symbolic hard filters + calibrated scoring + optional LLM reasoning—satisfies hard constraints \textit{by construction} and is robust across diverse tabular stress scenarios.}
+
+\vspace{2pt}
+{\small\textbf{Future Directions:}
+\begin{itemize}
+  \item \textbf{Learned embeddings}: replace 0–4 scores with contrastive embeddings from benchmarks
+  \item \textbf{Online Bayesian adaptation}: update priors from user-reported synthesis quality
+  \item \textbf{Expanded benchmark}: 20+ datasets (medical, financial, text-derived)
+  \item \textbf{Multi-objective Pareto}: balance quality, privacy \& compute jointly
+\end{itemize}}
+
+\end{multicols}
+
+\vspace{0pt}
+%% ── FOOTER ───────────────────────────────────────────────────────────────────
+\noindent\colorbox{UCLADark}{\begin{minipage}{\dimexpr\linewidth-2\fboxsep}
+  \vspace{1.5pt}\centering
+  {\color{white}\footnotesize
+    \textbf{Code:}\;\texttt{github.com/UCLA-Trustworthy-AI-Lab/Synthony}
+    \;\textcolor{UCLAGold}{|}\;
+    \textbf{Paper:}\;\texttt{openreview.net/forum?id=cj4SNumWqf}
+    \;\textcolor{UCLAGold}{|}\;
+    \textbf{Contact:}\;\texttt{hochanson@g.ucla.edu}}
+  \vspace{1.5pt}
+\end{minipage}}
+
+\end{document}

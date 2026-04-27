@@ -1,6 +1,9 @@
 # Synthony License
 
-Copyright (c) 2026 Hochan Son, UCLA Trustworthy AI Lab
+**SPDX-License-Identifier: LicenseRef-MIT-NC**
+
+Copyright (c) 2026 Hochan Son, Xiaofeng Lin, Jason Ni, and Guang Cheng
+UCLA Trustworthy AI Lab
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -15,7 +18,7 @@ sublicense copies of the Software, subject to the following conditions:
 
 2. **Non-Commercial Use Only** — The Software may not be used, in whole or in
    part, for commercial purposes without prior written authorization from the
-   copyright holder. "Commercial purposes" means any use intended for or
+   copyright holders. "Commercial purposes" means any use intended for or
    directed toward commercial advantage or monetary compensation, including
    but not limited to: incorporation into a commercial product or service,
    use by a for-profit organization in its internal operations, or sale or
@@ -30,6 +33,19 @@ sublicense copies of the Software, subject to the following conditions:
    > *ICLR 2026 2nd Workshop on Deep Generative Model in Machine Learning:
    > Theory, Principle and Efficacy (DeLTa)*, 2026.
    > https://openreview.net/forum?id=cj4SNumWqf
+
+   BibTeX:
+   ```bibtex
+   @inproceedings{son2026synthony,
+     title     = {{SYNTHONY}: A Stress-Aware, Intent-Conditioned Agent for Deep
+                  Tabular Generative Model Selection},
+     author    = {Hochan Son and Xiaofeng Lin and Jason Ni and Guang Cheng},
+     booktitle = {ICLR 2026 2nd Workshop on Deep Generative Model in Machine
+                  Learning: Theory, Principle and Efficacy (DeLTa)},
+     year      = {2026},
+     url       = {https://openreview.net/forum?id=cj4SNumWqf}
+   }
+   ```
 
 4. **No Sublicensing for Commercial Use** — You may not sublicense the
    Software to any third party for commercial use.
@@ -49,5 +65,5 @@ SOFTWARE.
 For commercial use inquiries, please contact:
 
 - **Hochan Son** — ohsono@gmail.com / hochanson@g.ucla.edu
-- **Guang Cheng** - guangcheng@stat.ucla.edu
+- **Guang Cheng** — guangcheng@stat.ucla.edu
 - **UCLA Trustworthy AI Lab** — http://www.stat.ucla.edu/~guangcheng/

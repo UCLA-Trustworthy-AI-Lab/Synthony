@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "version": "7.0.0",
-    "last_updated": "2026-02-07",
-    "source": "spark benchmarks (10 datasets, 14 models) + v6.0.0 metadata. Cardinality uses density-normalized formula.",
+    "version": "7.0.2",
+    "last_updated": "2026-04-17",
+    "source": "spark benchmarks (10 datasets, 14 models) + v6.0.0 metadata. Cardinality uses density-normalized formula. | Updated skew_preservation from 2 new benchmark runs | Reverted test run",
     "description": "Model capabilities derived from empirical benchmark results with row-count-normalized cardinality scoring.",
     "compatible_models_count": 15,
     "dp_threshold": 3,
@@ -22,7 +22,7 @@
     "hard_problem_confidence": {
       "primary": 0.95,
       "fallback": 0.85,
-      "alternative": 0.70
+      "alternative": 0.7
     },
     "score_decay": {
       "exact": 1.0,
