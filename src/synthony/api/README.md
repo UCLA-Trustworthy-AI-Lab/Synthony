@@ -331,24 +331,25 @@ print(f"Recommended: {result['recommendation']['recommended_model']['model_name'
 
 ## Supported Models
 
-13 State-of-the-Art synthesis models:
+15 State-of-the-Art synthesis models:
 
 ### By Type
 
 - **Diffusion**: TabDDPM, TabSyn, AutoDiff
 - **LLM-based**: GReaT
-- **Tree-based**: ARF, CART
-- **GAN**: CTGAN
+- **Tree-based**: ARF, CART, DPCART
+- **GAN**: CTGAN, PATECTGAN
 - **VAE**: TVAE
-- **Statistical**: GaussianCopula
-- **Differential Privacy**: PATE-CTGAN, AIM, DPCART
+- **Statistical**: BayesianNetwork, NFlow, SMOTE, AIM
+- **Baseline**: Identity
+- **Differential Privacy**: PATECTGAN, AIM, DPCART
 
 ### By Capability
 
 - **High Cardinality**: CTGAN, TabDDPM, TabSyn
 - **Severe Skew**: GReaT, AutoDiff, TabDDPM
-- **Small Data**: GaussianCopula, ARF
-- **Privacy-Preserving**: PATE-CTGAN, AIM, DPCART
+- **Small Data**: ARF, CART, BayesianNetwork, SMOTE
+- **Privacy-Preserving**: PATECTGAN, AIM, DPCART
 
 ---
 

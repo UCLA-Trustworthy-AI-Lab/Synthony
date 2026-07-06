@@ -290,7 +290,7 @@ class TestAnalyzeAndRecommendEndpoint:
         assert data["analysis"]["dataset_profile"]["stress_factors"]["small_data"] is True
 
         # Recommendation should consider small data
-        # ARF and GaussianCopula are best for small data
+        # ARF and CART are best for small data
         all_models = [data["recommendation"]["recommended_model"]["model_name"]]
         if "alternative_models" in data["recommendation"]:
             all_models.extend([
@@ -298,8 +298,8 @@ class TestAnalyzeAndRecommendEndpoint:
                 for alt in data["recommendation"]["alternative_models"]
             ])
 
-        # Should recommend or include ARF or GaussianCopula
-        assert "ARF" in all_models or "GaussianCopula" in all_models
+        # Should recommend or include ARF or CART
+        assert "ARF" in all_models or "CART" in all_models
 
     def test_one_shot_with_skewed_data(self, client, skewed_csv_file):
         """One-shot with skewed dataset."""

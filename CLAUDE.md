@@ -122,6 +122,7 @@ RecommendationResult
 | `config/` | Model capabilities registry (`model_capabilities.json`), LLM system prompt |
 | `scripts/` | Optimization scripts (`optimize_scaling.py` for Bayesian calibration) |
 | `ablation/` | Ablation study runner (`run_ablations.py`) |
+| `baselines/` | Non-Synthony comparison baselines: static heuristic, vanilla LLM, random search, meta-feature kNN (`run_baselines.py` orchestrates all four) |
 | `tests/` | Unit, integration, functional, evaluation, and regression tests |
 
 ### Stress Detection Thresholds
@@ -146,6 +147,8 @@ Defined in `src/synthony/utils/constants.py`:
 - **Tree-based**: ARF, CART, DPCART
 - **Statistical**: BayesianNetwork, NFlow, SMOTE, AIM
 - **Baseline**: Identity
+
+> **Note:** `ModelRecommendationEngine` defaults to loading `src/synthony/recommender/model_capabilities.json` (a package-local copy), not `config/model_capabilities.json` directly. `scripts/generate_model_capabilities.py` only writes to `config/model_capabilities.json`. After regenerating the registry, manually sync the file into `src/synthony/recommender/` (or pass `capabilities_path=` explicitly) for the engine to pick up the changes.
 
 The registry also stores all engine configuration:
 - `metadata.dp_threshold` — DP filter threshold (default: 3)
@@ -173,6 +176,7 @@ The registry also stores all engine configuration:
 - `config/SystemPrompt.md` - LLM system prompt v5.0 (canonical, used by engine)
 - `scripts/optimize_scaling.py` - Bayesian optimization of scale factors (Optuna/TPE)
 - `ablation/run_ablations.py` - Ablation study experiment runner
+- `baselines/run_baselines.py` - Runs all 4 non-Synthony baselines and produces a comparison table
 - `docs/scoring_methodology.md` - Capability scoring formulas and engine pipeline
 
 ## MCP Server Integration

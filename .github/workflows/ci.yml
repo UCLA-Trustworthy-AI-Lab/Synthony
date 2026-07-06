@@ -37,6 +37,9 @@ jobs:
       - name: Run functional tests
         run: pytest tests/functional/ -v --tb=short
 
+      - name: Run regression tests
+        run: pytest tests/regression/ -v --tb=short
+
       - name: Run MCP server tests
         run: |
           cd mcp_server
