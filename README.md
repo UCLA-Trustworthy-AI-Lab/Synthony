@@ -13,6 +13,9 @@ Synthony is an intelligent orchestration platform that analyzes your tabular dat
 
 ---
 
+> **Published at the 2nd DeLTa Workshop, ICLR 2026**
+> [Paper](https://openreview.net/forum?id=cj4SNumWqf) | [Code](https://github.com/UCLA-Trustworthy-AI-Lab/Synthony)
+
 ## Why Synthony?
 
 Choosing the right synthetic data model is non-trivial. Each model family has distinct failure modes:
@@ -409,6 +412,12 @@ pytest -m "not requires_llm"
 pytest --cov=synthony --cov-report=html
 ```
 
+Some tests in `tests/integration/test_api_integration.py` require a live API server on `localhost:8000` and skip otherwise; start one with `uvicorn synthony.api.server:app --port 8000` before running the suite for full coverage.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
+
 ---
 
 ## Roadmap
@@ -428,13 +437,15 @@ Contributions are welcome. See [`CLAUDE.md`](CLAUDE.md) for architecture details
 
 ## License
 
-MIT-NC (MIT Non-Commercial) — free for academic and research use with attribution. Commercial use requires prior written authorization. See [LICENSE.md](LICENSE.md).
+MIT-NC (MIT Non-Commercial) — free for academic and research use with attribution; commercial use requires prior written authorization from the copyright holder. See [LICENSE.md](LICENSE.md) for full terms.
 
-For commercial licensing: ohsono@gmail.com / hochanson@g.ucla.edu
+For commercial licensing inquiries: ohsono@gmail.com / hochanson@g.ucla.edu
 
 ---
 
 ## Citation
+
+If you use Synthony in your research, please cite our paper:
 
 ```bibtex
 @inproceedings{son2026synthony,

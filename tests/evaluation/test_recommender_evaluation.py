@@ -463,7 +463,7 @@ class TestConstraintFiltering:
     def test_allowed_models_filter(self, engine, all_profiles, dataset_name):
         """allowed_models constraint should restrict to specified models."""
         profile = all_profiles[dataset_name]
-        allowed = ["ARF", "CTGAN", "GaussianCopula"]
+        allowed = ["ARF", "CTGAN", "CART"]
         result = engine.recommend(
             dataset_profile=profile,
             constraints={"allowed_models": allowed},
@@ -665,7 +665,7 @@ class TestTieBreaking:
         sorted_models = self._make_sorted_models([
             ("CTGAN", 10.0),
             ("ARF", 9.8),
-            ("GaussianCopula", 9.5),
+            ("CART", 9.5),
         ])
         profile = DatasetProfile(
             row_count=500, column_count=5,
@@ -696,7 +696,7 @@ class TestTieBreaking:
         result = engine._apply_tie_breaking(
             sorted_models, profile, {"prefer_speed": True}
         )
-        assert result in {"TVAE", "CTGAN", "ARF", "GaussianCopula"}
+        assert result in {"TVAE", "CTGAN", "ARF", "CART"}
 
     def test_quality_default_tiebreak(self, engine):
         """Default tie-breaking should prefer GPU models when cpu_only=false."""

@@ -175,7 +175,7 @@ class TestRuleBasedVsBenchmarks:
         all_models.extend([alt.model_name for alt in result.alternative_models])
         
         # Small data should recommend tree-based or statistical models
-        small_data_appropriate = {"ARF", "CART", "BayesianNetwork", "SMOTE", "GaussianCopula"}
+        small_data_appropriate = {"ARF", "CART", "BayesianNetwork", "SMOTE"}
         assert any(m in small_data_appropriate for m in all_models), \
             f"Expected small-data models, got: {all_models}"
 

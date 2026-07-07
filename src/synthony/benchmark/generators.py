@@ -162,7 +162,7 @@ class BenchmarkDatasetGenerator:
 
         Generates a small dataset with correlated features to test
         overfitting prevention in models. Small datasets require
-        tree-based models like ARF or GaussianCopula.
+        tree-based models like ARF or CART.
 
         Generation:
         - 200 rows (default), multivariate data

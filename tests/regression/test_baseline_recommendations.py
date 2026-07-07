@@ -156,7 +156,7 @@ class TestBenchmarkBaselineRecommendations:
         assert rec_model in expected_models
 
     def test_small_data_baseline(self, client):
-        """Small Data Trap should consistently recommend ARF or GaussianCopula."""
+        """Small Data Trap should consistently recommend ARF or CART."""
         df = BenchmarkDatasetGenerator.generate_small_data_trap(n_rows=200, seed=42)
 
         csv_buffer = io.BytesIO()
@@ -183,7 +183,7 @@ class TestBenchmarkBaselineRecommendations:
         for factor, expected_value in expected.items():
             assert profile["stress_factors"][factor] == expected_value
 
-        # For small data, check top recommendations include ARF or GaussianCopula
+        # For small data, check top recommendations include ARF or CART
         rec_model = data["recommendation"]["recommended_model"]["model_name"]
         all_models = [rec_model]
 
@@ -352,7 +352,7 @@ class TestConfidenceScoreRegression:
 
     def test_high_confidence_for_clear_cases(self, client):
         """Clear-cut cases should have high confidence."""
-        # Very small dataset (clear recommendation: ARF or GaussianCopula)
+        # Very small dataset (clear recommendation: ARF or CART)
         df = pd.DataFrame({
             "value": np.random.randn(100)
         })

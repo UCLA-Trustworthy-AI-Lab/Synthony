@@ -27,7 +27,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session as DBSession
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import joinedload, relationship, sessionmaker
 
 Base = declarative_base()
 
@@ -379,6 +379,128 @@ def cleanup_expired_sessions():
             db.delete(session)
         db.commit()
         return count
+    finally:
+        db.close()
+
+
+# ============================================================================
+# Session Listing/Detail Operations (for /sessions REST API)
+# ============================================================================
+#
+# get_session() closes its DB session before returning, so touching a lazy
+# relationship (e.g. session.datasets) afterward raises DetachedInstanceError.
+# The functions below eager-load relationships via joinedload and, where
+# nested data is needed, fully materialize to a dict while the DB session is
+# still open.
+
+
+def list_sessions(include_expired: bool = False, limit: int = 100, offset: int = 0) -> list[Session]:
+    """List sessions, most recent first.
+
+    Args:
+        include_expired: If False (default), excludes sessions past expires_at.
+        limit: Max sessions to return.
+        offset: Pagination offset.
+    """
+    db = get_db_session()
+    try:
+        query = db.query(Session)
+        if not include_expired:
+            query = query.filter(Session.expires_at >= datetime.utcnow())
+        return query.order_by(Session.created_at.desc()).offset(offset).limit(limit).all()
+    finally:
+        db.close()
+
+
+def count_sessions(include_expired: bool = False) -> int:
+    """Total session count, for pagination metadata and /storage/stats."""
+    db = get_db_session()
+    try:
+        query = db.query(Session)
+        if not include_expired:
+            query = query.filter(Session.expires_at >= datetime.utcnow())
+        return query.count()
+    finally:
+        db.close()
+
+
+def count_datasets() -> int:
+    """Total dataset count, for /storage/stats."""
+    db = get_db_session()
+    try:
+        return db.query(Dataset).count()
+    finally:
+        db.close()
+
+
+def get_session_with_details(session_id: str) -> dict | None:
+    """Fetch a session plus its datasets and each dataset's analyses,
+    materialized to a dict while the DB session is still open.
+    """
+    db = get_db_session()
+    try:
+        session = (
+            db.query(Session)
+            .options(
+                joinedload(Session.datasets)
+                .joinedload(Dataset.analyses)
+                .joinedload(Analysis.system_prompt)
+            )
+            .filter(Session.session_id == session_id)
+            .first()
+        )
+        if not session:
+            return None
+        result = session.to_dict()
+        result["datasets"] = [
+            {**dataset.to_dict(), "analyses": [a.to_dict() for a in dataset.analyses]}
+            for dataset in session.datasets
+        ]
+        return result
+    finally:
+        db.close()
+
+
+def get_analysis_with_relations(analysis_id: str) -> Analysis | None:
+    """Like get_analysis(), but eager-loads system_prompt so callers can
+    safely call .to_dict() (which accesses analysis.system_prompt.version)
+    after the DB session closes.
+    """
+    db = get_db_session()
+    try:
+        return (
+            db.query(Analysis)
+            .options(joinedload(Analysis.system_prompt))
+            .filter(Analysis.analysis_id == analysis_id)
+            .first()
+        )
+    finally:
+        db.close()
+
+
+def delete_session_by_id(session_id: str) -> dict | None:
+    """Delete a session row; cascades to its datasets and analyses via the
+    ORM relationship cascade (same mechanism cleanup_expired_sessions() uses).
+
+    Returns:
+        {"datasets_deleted": int, "analyses_deleted": int} counted before
+        delete, or None if the session doesn't exist.
+    """
+    db = get_db_session()
+    try:
+        session = (
+            db.query(Session)
+            .options(joinedload(Session.datasets).joinedload(Dataset.analyses))
+            .filter(Session.session_id == session_id)
+            .first()
+        )
+        if not session:
+            return None
+        datasets_deleted = len(session.datasets)
+        analyses_deleted = sum(len(d.analyses) for d in session.datasets)
+        db.delete(session)
+        db.commit()
+        return {"datasets_deleted": datasets_deleted, "analyses_deleted": analyses_deleted}
     finally:
         db.close()
 

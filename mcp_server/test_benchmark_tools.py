@@ -18,40 +18,28 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 def test_benchmark_tools_import():
     """Test that BenchmarkTools can be imported."""
     print("Testing BenchmarkTools import...")
-    
-    try:
-        from mcp_server.tools.benchmark_tools import BenchmarkTools
-        print("✓ BenchmarkTools imported successfully")
-        return True
-    except Exception as e:
-        print(f"✗ Failed to import BenchmarkTools: {e}")
-        return False
+
+    from mcp_server.tools.benchmark_tools import BenchmarkTools  # noqa: F401
+    print("✓ BenchmarkTools imported successfully")
 
 
 def test_benchmark_tool_definitions():
     """Test that benchmark tool definitions are properly structured."""
     print("\nTesting benchmark tool definitions...")
-    
-    try:
-        from mcp_server.tools.benchmark_tools import BenchmarkTools
-        
-        benchmark_tools = BenchmarkTools()
-        tool_names = benchmark_tools.get_tool_names()
-        print(f"✓ BenchmarkTools tool names: {tool_names}")
-        
-        tool_defs = benchmark_tools.get_tool_definitions()
-        print(f"✓ BenchmarkTools: {len(tool_defs)} tools defined")
-        
-        for tool in tool_defs:
-            print(f"  - {tool.name}: {tool.description[:80]}...")
-            print(f"    Required params: {tool.inputSchema['required']}")
-        
-        return True
-    except Exception as e:
-        print(f"✗ Failed to test tool definitions: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+
+    from mcp_server.tools.benchmark_tools import BenchmarkTools
+
+    benchmark_tools = BenchmarkTools()
+    tool_names = benchmark_tools.get_tool_names()
+    print(f"✓ BenchmarkTools tool names: {tool_names}")
+
+    tool_defs = benchmark_tools.get_tool_definitions()
+    print(f"✓ BenchmarkTools: {len(tool_defs)} tools defined")
+    assert len(tool_defs) == len(tool_names)
+
+    for tool in tool_defs:
+        print(f"  - {tool.name}: {tool.description[:80]}...")
+        print(f"    Required params: {tool.inputSchema['required']}")
 
 
 
@@ -59,75 +47,64 @@ def test_benchmark_tool_definitions():
 async def test_benchmark_compare():
     """Test the benchmark_compare tool with actual data."""
     print("\nTesting benchmark_compare execution...")
-    
-    try:
-        from mcp_server.tools.benchmark_tools import BenchmarkTools
-        
-        # Use actual paths from the workspace
-        original_path = "dataset/input_data/abalone.csv"
-        synthetic_path = "dataset/synth_data/spark/abalone/abalone_synthetic_aim_1000.csv"
-        
-        # Check if files exist
-        if not Path(original_path).exists():
-            print(f"✗ Original file not found: {original_path}")
-            return False
-        
-        if not Path(synthetic_path).exists():
-            print(f"✗ Synthetic file not found: {synthetic_path}")
-            return False
-        
-        print(f"  Original file: {original_path} ({Path(original_path).stat().st_size} bytes)")
-        print(f"  Synthetic file: {synthetic_path} ({Path(synthetic_path).stat().st_size} bytes)")
-        
-        benchmark_tools = BenchmarkTools()
-        
-        # Execute the benchmark_compare tool
-        result = await benchmark_tools.execute_tool(
-            "benchmark_compare",
-            {
-                "original_path": original_path,
-                "synthetic_path": synthetic_path,
-            }
-        )
-        
-        print("✓ benchmark_compare executed successfully")
-        
-        # Validate result structure
-        expected_keys = ["quality_score", "fidelity", "utility", "privacy", "per_column_metrics"]
-        missing_keys = [k for k in expected_keys if k not in result]
-        
-        if missing_keys:
-            print(f"⚠ Missing keys in result: {missing_keys}")
-        else:
-            print(f"✓ Result contains all expected keys: {expected_keys}")
-        
-        # Show summary stats
-        if "quality_score" in result:
-            print(f"  Quality Score: {result['quality_score']:.3f}")
-        
-        if "fidelity" in result:
-            fidelity = result["fidelity"]
-            print(f"  Fidelity: {json.dumps(fidelity, indent=2)}")
-        
-        if "utility" in result:
-            utility = result["utility"]
-            print(f"  Utility: {json.dumps(utility, indent=2)}")
-        
-        if "privacy" in result:
-            privacy = result["privacy"]
-            print(f"  Privacy: {json.dumps(privacy, indent=2)}")
-        
-        if "per_column_metrics" in result:
-            col_metrics = result["per_column_metrics"]
-            print(f"  Per-Column Metrics: {len(col_metrics)} columns analyzed")
-        
-        return True
-        
-    except Exception as e:
-        print(f"✗ Failed to execute benchmark_compare: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+
+    from mcp_server.tools.benchmark_tools import BenchmarkTools
+
+    # Use actual paths from the workspace
+    original_path = "dataset/input_data/abalone.csv"
+    synthetic_path = "dataset/synth_data/spark/abalone/abalone_synthetic_aim_1000.csv"
+
+    # Check if files exist
+    if not Path(original_path).exists():
+        pytest.skip(f"Original file not found: {original_path}")
+
+    if not Path(synthetic_path).exists():
+        pytest.skip(f"Synthetic file not found: {synthetic_path}")
+
+    print(f"  Original file: {original_path} ({Path(original_path).stat().st_size} bytes)")
+    print(f"  Synthetic file: {synthetic_path} ({Path(synthetic_path).stat().st_size} bytes)")
+
+    benchmark_tools = BenchmarkTools()
+
+    # Execute the benchmark_compare tool
+    result = await benchmark_tools.execute_tool(
+        "benchmark_compare",
+        {
+            "original_path": original_path,
+            "synthetic_path": synthetic_path,
+        }
+    )
+
+    print("✓ benchmark_compare executed successfully")
+
+    # Validate result structure
+    expected_keys = ["quality_score", "fidelity", "utility", "privacy", "per_column_metrics"]
+    missing_keys = [k for k in expected_keys if k not in result]
+
+    if missing_keys:
+        print(f"⚠ Missing keys in result: {missing_keys}")
+    else:
+        print(f"✓ Result contains all expected keys: {expected_keys}")
+
+    # Show summary stats
+    if "quality_score" in result:
+        print(f"  Quality Score: {result['quality_score']:.3f}")
+
+    if "fidelity" in result:
+        fidelity = result["fidelity"]
+        print(f"  Fidelity: {json.dumps(fidelity, indent=2)}")
+
+    if "utility" in result:
+        utility = result["utility"]
+        print(f"  Utility: {json.dumps(utility, indent=2)}")
+
+    if "privacy" in result:
+        privacy = result["privacy"]
+        print(f"  Privacy: {json.dumps(privacy, indent=2)}")
+
+    if "per_column_metrics" in result:
+        col_metrics = result["per_column_metrics"]
+        print(f"  Per-Column Metrics: {len(col_metrics)} columns analyzed")
 
 
 
@@ -136,29 +113,27 @@ async def test_benchmark_compare_with_eval():
     """Test the benchmark_compare tool with evaluation dataset (differential privacy)."""
     print("\nTesting benchmark_compare with differential privacy metrics...")
     
+    from mcp_server.tools.benchmark_tools import BenchmarkTools
+
+    # Use actual paths from the workspace
+    original_path = "dataset/input_data/Bean.csv"
+    synthetic_path = "dataset/synth_data/spark/Bean/Bean_synthetic_ctgan_1000.csv"
+    evaluation_path = "dataset/input_data/Bean.csv"  # Using same file as placeholder
+
+    # Check if files exist
+    if not Path(original_path).exists():
+        pytest.skip(f"Original file not found: {original_path}")
+
+    if not Path(synthetic_path).exists():
+        pytest.skip(f"Synthetic file not found: {synthetic_path}")
+
+    print(f"  Original file: {original_path}")
+    print(f"  Synthetic file: {synthetic_path}")
+    print(f"  Evaluation file: {evaluation_path}")
+
+    benchmark_tools = BenchmarkTools()
+
     try:
-        from mcp_server.tools.benchmark_tools import BenchmarkTools
-        
-        # Use actual paths from the workspace
-        original_path = "dataset/input_data/Bean.csv"
-        synthetic_path = "dataset/synth_data/spark/Bean/Bean_synthetic_ctgan_1000.csv"
-        evaluation_path = "dataset/input_data/Bean.csv"  # Using same file as placeholder
-        
-        # Check if files exist
-        if not Path(original_path).exists():
-            print(f"⚠ Original file not found: {original_path}, skipping DP test")
-            return True
-        
-        if not Path(synthetic_path).exists():
-            print(f"⚠ Synthetic file not found: {synthetic_path}, skipping DP test")
-            return True
-        
-        print(f"  Original file: {original_path}")
-        print(f"  Synthetic file: {synthetic_path}")
-        print(f"  Evaluation file: {evaluation_path}")
-        
-        benchmark_tools = BenchmarkTools()
-        
         # Execute the benchmark_compare tool with evaluation dataset
         result = await benchmark_tools.execute_tool(
             "benchmark_compare",
@@ -168,26 +143,25 @@ async def test_benchmark_compare_with_eval():
                 "evaluation_path": evaluation_path,
             }
         )
-        
-        print("✓ benchmark_compare with evaluation dataset executed successfully")
-        
-        # Check if differential_privacy metrics are present
-        if "differential_privacy" in result:
-            print("✓ Differential privacy metrics computed")
-            dp_metrics = result["differential_privacy"]
-            for key, value in dp_metrics.items():
-                if isinstance(value, float):
-                    print(f"  {key}: {value:.6f}")
-                else:
-                    print(f"  {key}: {value}")
-        else:
-            print("⚠ Differential privacy metrics not found in result")
-        
-        return True
-        
     except Exception as e:
+        # Differential privacy computation is best-effort here; don't fail
+        # the overall test suite for it.
         print(f"⚠ Differential privacy test failed (may be expected): {e}")
-        return True  # Don't fail the overall test for this
+        return
+
+    print("✓ benchmark_compare with evaluation dataset executed successfully")
+
+    # Check if differential_privacy metrics are present
+    if "differential_privacy" in result:
+        print("✓ Differential privacy metrics computed")
+        dp_metrics = result["differential_privacy"]
+        for key, value in dp_metrics.items():
+            if isinstance(value, float):
+                print(f"  {key}: {value:.6f}")
+            else:
+                print(f"  {key}: {value}")
+    else:
+        print("⚠ Differential privacy metrics not found in result")
 
 
 def main():
@@ -209,7 +183,11 @@ def main():
     results = {}
     for test_name, test_func in tests:
         try:
-            results[test_name] = test_func()
+            test_func()
+            results[test_name] = True
+        except pytest.skip.Exception as e:
+            print(f"\n⏭ {test_name} skipped: {e}")
+            results[test_name] = True
         except Exception as e:
             print(f"\n✗ {test_name} test failed with exception: {e}")
             import traceback
@@ -226,7 +204,11 @@ def main():
         
         for test_name, test_func in async_tests:
             try:
-                async_results[test_name] = await test_func()
+                await test_func()
+                async_results[test_name] = True
+            except pytest.skip.Exception as e:
+                print(f"\n⏭ {test_name} skipped: {e}")
+                async_results[test_name] = True
             except Exception as e:
                 print(f"\n✗ {test_name} test failed with exception: {e}")
                 import traceback

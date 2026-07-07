@@ -12,6 +12,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from synthony.api.server import app
+from synthony.recommender.engine import ModelRecommendationEngine
+
+# Derive valid model names from the registry (not hardcoded)
+ALL_MODELS = set(ModelRecommendationEngine().models.keys())
 
 
 @pytest.fixture
@@ -318,10 +322,7 @@ class TestMethodComparison:
         # Different methods may recommend different models (this is expected)
         # But all should be valid recommendations
         for method, result in results.items():
-            assert result["model"] in [
-                "GReaT", "TabDDPM", "TabSyn", "AutoDiff", "ARF",
-                "CTGAN", "TVAE", "PATE-CTGAN", "DPCART", "AIM", "GaussianCopula", "NFlow"
-            ]
+            assert result["model"] in ALL_MODELS
 
     def test_method_performance_comparison(self, client, titanic_like_csv):
         """Compare response times of different methods."""

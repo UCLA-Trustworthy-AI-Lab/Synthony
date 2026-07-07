@@ -58,6 +58,8 @@ tests/
 !tests/functional/test_api_advanced.py
 !tests/functional/test_llm_with_systemprompt.py
 test_*.py
+!tests/functional/test_api_advanced.py
+!tests/functional/test_llm_with_systemprompt.py
 
 # Development files
 *.md

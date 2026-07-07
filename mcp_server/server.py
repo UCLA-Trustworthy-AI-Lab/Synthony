@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import (
+    CallToolResult,
     Tool,
     TextContent,
     ImageContent,
@@ -142,7 +143,7 @@ class SynthonyMCPServer:
             return tools
 
         @self.server.call_tool()
-        async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
+        async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent] | CallToolResult:
             """Execute a tool with given arguments."""
             logger.info(f"Calling tool: {name} with arguments: {arguments}")
 

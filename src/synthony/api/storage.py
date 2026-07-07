@@ -11,6 +11,7 @@ Handles:
 import os
 import re
 import shutil
+import uuid
 from pathlib import Path
 
 
@@ -193,6 +194,19 @@ class StorageManager:
                 total += file_path.stat().st_size
         return total
 
+    @staticmethod
+    def _is_session_dir(name: str) -> bool:
+        """Session directories are named after a session_id (a UUID). This
+        excludes non-session subdirectories under upload_dir, such as
+        `systemprompt/` (created by the system-prompt upload endpoint), from
+        being miscounted as sessions/datasets.
+        """
+        try:
+            uuid.UUID(name)
+            return True
+        except ValueError:
+            return False
+
     def get_storage_stats(self) -> dict:
         """Get storage usage statistics.
 
@@ -202,13 +216,15 @@ class StorageManager:
         total_size = self.get_directory_size(self.upload_dir)
         total_limit = self.max_total_storage_gb * 1024 * 1024 * 1024
 
-        sessions = list(self.upload_dir.glob("*"))
-        active_sessions = len([s for s in sessions if s.is_dir()])
+        session_dirs = [
+            s for s in self.upload_dir.glob("*")
+            if s.is_dir() and self._is_session_dir(s.name)
+        ]
+        active_sessions = len(session_dirs)
 
         datasets = []
-        for session_dir in sessions:
-            if session_dir.is_dir():
-                datasets.extend(list(session_dir.glob("*")))
+        for session_dir in session_dirs:
+            datasets.extend(list(session_dir.glob("*")))
 
         return {
             "total_size_gb": total_size / 1024 / 1024 / 1024,

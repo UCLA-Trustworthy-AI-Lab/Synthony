@@ -138,7 +138,7 @@ class TestBenchmarkDatasetWorkflows:
         assert data["analysis"]["dataset_profile"]["stress_factors"]["small_data"] is True
         assert data["analysis"]["dataset_profile"]["row_count"] == 200
 
-        # Should recommend ARF or GaussianCopula (best for small data)
+        # Should recommend ARF or CART (best for small data)
         rec = data["recommendation"]["recommended_model"]
         all_models = [rec["model_name"]]
         if "alternative_models" in data["recommendation"]:
@@ -147,7 +147,7 @@ class TestBenchmarkDatasetWorkflows:
                 for alt in data["recommendation"]["alternative_models"]
             ])
 
-        assert "ARF" in all_models or "GaussianCopula" in all_models
+        assert "ARF" in all_models or "CART" in all_models
 
 
 class TestConstraintWorkflows:
@@ -389,8 +389,8 @@ class TestEdgeCases:
         if "alternative_models" in data["recommendation"]:
             all_models.extend([alt["model_name"] for alt in data["recommendation"]["alternative_models"]])
 
-        # ARF or GaussianCopula should be recommended
-        assert "ARF" in all_models or "GaussianCopula" in all_models
+        # ARF or CART should be recommended
+        assert "ARF" in all_models or "CART" in all_models
 
     def test_single_column_dataset(self, client):
         """Test with single-column dataset."""

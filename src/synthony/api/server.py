@@ -37,7 +37,7 @@ from synthony.recommender.engine import (
     RecommendationResult,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 # ============================================================================
 # API Models (Request/Response Schemas)
@@ -107,7 +107,7 @@ class HealthResponse(BaseModel):
     """Health check response."""
 
     status: str = "healthy"
-    version: str = "0.1.0"
+    version: str = "0.1.1"
     analyzer_available: bool = True
     recommender_available: bool = True
     llm_available: bool = False
@@ -125,7 +125,7 @@ app = FastAPI(
 
     **Features**:
     - Dataset profiling (Skewness, Cardinality, Zipfian, Correlation analysis)
-    - Model recommendation (13+ SOTA models from table-synthesizers)
+    - Model recommendation (15 SOTA models from table-synthesizers)
     - Hybrid rule-based + LLM decision engine
 
     **Recommendation Methods**:
@@ -133,7 +133,7 @@ app = FastAPI(
     - `llm`: OpenAI GPT-4 with SystemPrompt reasoning (requires OPENAI_API_KEY)
     - `hybrid`: Rule-based pre-filtering + LLM re-ranking (best of both)
     """,
-    version="0.1.0",
+    version="0.1.1",
     docs_url="/docs",
     redoc_url="/redoc",
 )
