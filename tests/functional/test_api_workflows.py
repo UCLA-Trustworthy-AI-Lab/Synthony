@@ -6,36 +6,10 @@ Tests complete user workflows: upload CSV → analyze → recommend → get resu
 
 import io
 import pytest
-from fastapi.testclient import TestClient
 import pandas as pd
 import numpy as np
 
-# Import the FastAPI app
-from synthony.api.server import app
-
-
-@pytest.fixture
-def client():
-    """Create test client for API with startup events triggered."""
-    with TestClient(app) as client:
-        yield client
-
-
-@pytest.fixture
-def sample_csv_file():
-    """Create sample CSV file for upload."""
-    df = pd.DataFrame({
-        "id": range(1000),
-        "value": np.random.randn(1000),
-        "category": np.random.choice(["A", "B", "C"], 1000),
-    })
-
-    # Convert to bytes for file upload
-    csv_buffer = io.BytesIO()
-    df.to_csv(csv_buffer, index=False)
-    csv_buffer.seek(0)
-
-    return ("test.csv", csv_buffer, "text/csv")
+# `client` and `sample_csv_file` fixtures are shared via conftest.py
 
 
 @pytest.fixture

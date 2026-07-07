@@ -331,6 +331,8 @@ pytest --cov=synthony --cov-report=term-missing
 pytest tests/unit/test_skewness_detector.py -v
 ```
 
+Some tests in `tests/integration/test_api_integration.py` require a live API server on `localhost:8000` and skip otherwise; start one with `uvicorn synthony.api.server:app --port 8000` before running the suite for full coverage.
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for release history.

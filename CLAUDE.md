@@ -52,6 +52,8 @@ pytest -m "not requires_llm"              # Exclude LLM-dependent tests
 pytest --cov=synthony --cov-report=html   # Coverage with HTML report
 ```
 
+> **Note:** 6 tests in `tests/integration/test_api_integration.py` are skipif-gated on a live API server at `localhost:8000` (health check, upload/analyze, session retrieval, storage stats, system prompt list/upload). Without a running server they skip silently; start one first (`uvicorn synthony.api.server:app --port 8000`) for full integration coverage. Check for and kill any stale server already bound to that port before starting a fresh one -- a leftover process from a previous run can make failures look like application bugs.
+
 ### Code Quality
 
 ```bash

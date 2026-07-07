@@ -428,76 +428,89 @@ class RecommendationTools:
         detail_level = arguments.get("detail_level", "detailed")
 
         dataset_profile = DatasetProfile(**profile_dict)
-        primary_model = recommendation["primary_model"]
+        primary_model = recommendation["recommended_model"]
+        model_info = primary_model.get("model_info", {})
+        reasoning_text = "\n".join(f"- {r}" for r in primary_model.get("reasoning", []))
 
-        # Extract key factors
+        # Extract key factors from the already-computed stress factors
+        # (avoids re-deriving thresholds from raw per-column data, which
+        # previously duplicated -- and drifted from -- the analyzer's logic)
         key_factors = []
+        stress = dataset_profile.stress_factors
         row_count = dataset_profile.row_count
 
-        # Check stress factors
-        if any(s.skewness_coefficient > 2.0 for s in dataset_profile.skewness.skewness_scores):
-            key_factors.append("Severe skewness detected (> 2.0)")
+        if stress.severe_skew:
+            key_factors.append(f"Severe skewness detected (max {dataset_profile.skewness.max_skewness:.2f})")
 
-        if any(c.unique_count > 500 for c in dataset_profile.cardinality.cardinality_scores):
-            key_factors.append("High cardinality (> 500 unique values)")
+        if stress.high_cardinality:
+            key_factors.append(f"High cardinality (max {dataset_profile.cardinality.max_cardinality} unique values)")
 
-        if dataset_profile.cardinality.zipfian_ratio > 0.05:
-            key_factors.append(f"Zipfian distribution (ratio: {dataset_profile.cardinality.zipfian_ratio:.3f})")
+        if stress.zipfian_distribution and dataset_profile.zipfian.top_20_percent_ratio is not None:
+            key_factors.append(
+                f"Zipfian distribution (top 20% ratio: {dataset_profile.zipfian.top_20_percent_ratio:.3f})"
+            )
 
-        if row_count < 500:
+        if stress.higher_order_correlation:
+            key_factors.append("Dense, non-linear correlation structure")
+
+        if stress.small_data:
             key_factors.append(f"Small dataset ({row_count} rows)")
-        elif row_count > 50000:
+        elif stress.large_data:
             key_factors.append(f"Large dataset ({row_count} rows)")
 
         # Generate explanation based on detail level
         if detail_level == "brief":
-            explanation = f"Recommended {primary_model['name']} with confidence {primary_model['confidence']:.2f} based on dataset characteristics."
+            explanation = (
+                f"Recommended {primary_model['model_name']} with confidence "
+                f"{primary_model['confidence_score']:.2f} based on dataset characteristics."
+            )
         elif detail_level == "detailed":
             explanation = f"""
-Recommended Model: {primary_model['name']} ({primary_model['full_name']})
-Confidence Score: {primary_model['confidence']:.2f}
+Recommended Model: {primary_model['model_name']} ({model_info.get('full_name', primary_model['model_name'])})
+Confidence Score: {primary_model['confidence_score']:.2f}
 
 Key Dataset Characteristics:
-{chr(10).join(f"- {factor}" for factor in key_factors)}
+{chr(10).join(f"- {factor}" for factor in key_factors) or "- No significant stress factors detected"}
 
 Reasoning:
-{primary_model['reasoning']}
+{reasoning_text}
 
 Expected Performance:
-- Quality: {primary_model['performance']['quality']}
-- Speed: {primary_model['performance']['speed']}
+- Training: {model_info.get('performance', {}).get('training_speed', 'unknown')}
+- Inference: {model_info.get('performance', {}).get('inference_speed', 'unknown')}
+- Memory: {model_info.get('performance', {}).get('memory_usage', 'unknown')}
 """
         else:  # technical
             explanation = f"""
 TECHNICAL RECOMMENDATION REPORT
 ================================
 
-Primary Model: {primary_model['name']}
-Type: {primary_model['type']}
-Confidence: {primary_model['confidence']:.2f}
+Primary Model: {primary_model['model_name']}
+Type: {model_info.get('type', 'unknown')}
+Confidence: {primary_model['confidence_score']:.2f}
 
 Dataset Profile:
 - Rows: {row_count}
 - Columns: {dataset_profile.column_count}
-- Skewness Scores: {[s.skewness_coefficient for s in dataset_profile.skewness.skewness_scores]}
-- Cardinality Scores: {[c.unique_count for c in dataset_profile.cardinality.cardinality_scores]}
-- Zipfian Ratio: {dataset_profile.cardinality.zipfian_ratio:.3f}
+- Skewness (per column): {dataset_profile.skewness.column_scores}
+- Cardinality (per column): {dataset_profile.cardinality.column_counts}
+- Zipfian top-20% ratio: {dataset_profile.zipfian.top_20_percent_ratio}
 
-Capability Scores (0-4 scale):
-{json.dumps(primary_model['capabilities'], indent=2)}
+Capability Match (0-4 scale):
+{json.dumps(primary_model.get('capability_match', {}), indent=2)}
 
 Constraints:
-{json.dumps(primary_model['constraints'], indent=2)}
+{json.dumps(model_info.get('constraints', {}), indent=2)}
 
 Decision Reasoning:
-{primary_model['reasoning']}
+{reasoning_text}
 """
 
         # Get alternatives comparison
-        alternatives = recommendation.get("alternatives", [])
+        alternatives = recommendation.get("alternative_models", [])
         if alternatives:
             alternatives_comparison = "Alternative Models:\n" + "\n".join(
-                f"- {alt['name']}: Confidence {alt['confidence']:.2f}"
+                f"- {alt['model_name']}: Confidence {alt['confidence_score']:.2f}"
                 for alt in alternatives
             )
         else:
@@ -506,6 +519,6 @@ Decision Reasoning:
         return {
             "explanation": explanation.strip(),
             "key_factors": key_factors,
-            "model_strengths": "\n".join(primary_model.get("strengths", [])),
+            "model_strengths": "\n".join(model_info.get("strengths", [])),
             "alternatives_comparison": alternatives_comparison
         }

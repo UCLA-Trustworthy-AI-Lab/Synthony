@@ -5,22 +5,32 @@ Separated from server.py for better organization and maintainability.
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from synthony.api.database import (
+    count_datasets,
+    count_sessions,
     create_analysis,
     create_dataset,
     create_session,
     create_system_prompt,
+    delete_session_by_id,
     get_active_prompt,
     get_analysis,
     get_analysis_by_dataset,
+    get_analysis_with_relations,
     get_dataset,
     get_dataset_profile,
+    get_session,
+    get_session_with_details,
+    list_sessions,
     list_system_prompts,
     log_audit,
     set_active_prompt,
@@ -660,3 +670,232 @@ async def activate_system_prompt_by_version(version: str):
         "version": prompt.version,
         "message": f"System prompt version '{version}' is now active"
     }
+
+
+# ============================================================================
+# Session Management Endpoints
+#
+# No authentication exists anywhere in this API today; session_id (an
+# unguessable UUID) is already the sole thing gating access to a dataset's
+# contents for existing routes like /analyze. Detail/delete/download-by-
+# known-ID below are consistent with that existing trust model. GET
+# /sessions (list-all) is different: it lets a caller discover session_ids
+# they don't already have, which nothing today provides, so it's gated
+# behind ENABLE_SESSION_LISTING (default off) and omits ip_address.
+# ============================================================================
+
+
+class SessionSummary(BaseModel):
+    session_id: str
+    created_at: str
+    expires_at: str
+
+
+class SessionListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    sessions: list[SessionSummary]
+
+
+class SessionDeleteResponse(BaseModel):
+    session_id: str
+    deleted: bool
+    files_deleted: int
+    bytes_freed: int
+    datasets_deleted: int
+    analyses_deleted: int
+    message: str
+
+
+class StorageStatsResponse(BaseModel):
+    total_size_gb: float
+    storage_limit_gb: int
+    usage_percent: float
+    active_sessions: int
+    total_datasets: int
+    db_active_sessions: int
+    db_total_datasets: int
+
+
+@router.get("/sessions", response_model=SessionListResponse)
+async def list_sessions_endpoint(
+    limit: int = Query(100, ge=1, le=500, description="Max sessions to return"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    include_expired: bool = Query(False, description="Include expired sessions"),
+):
+    """
+    List sessions with metadata. Excludes expired sessions by default.
+
+    **Disabled by default** — set `ENABLE_SESSION_LISTING=true` to enable.
+    Unlike the other session routes, this lets a caller discover session_ids
+    they don't already have, so it's opt-in.
+    """
+    if os.getenv("ENABLE_SESSION_LISTING", "false").lower() != "true":
+        raise HTTPException(
+            status_code=404,
+            detail="Session listing is disabled. Set ENABLE_SESSION_LISTING=true to enable.",
+        )
+
+    sessions = list_sessions(include_expired=include_expired, limit=limit, offset=offset)
+    total = count_sessions(include_expired=include_expired)
+    return SessionListResponse(
+        total=total,
+        limit=limit,
+        offset=offset,
+        sessions=[
+            SessionSummary(session_id=s.session_id, created_at=s.created_at.isoformat(), expires_at=s.expires_at.isoformat())
+            for s in sessions
+        ],
+    )
+
+
+@router.get("/sessions/{session_id}", response_model=dict[str, Any])
+async def get_session_detail(session_id: str):
+    """Retrieve session details with all datasets and analyses."""
+    detail = get_session_with_details(session_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+    return detail
+
+
+@router.get("/sessions/{session_id}/data/{dataset_id}")
+async def download_dataset_file(session_id: str, dataset_id: str, request: Request = None):
+    """Download the original uploaded file for a dataset."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+
+    dataset = get_dataset(dataset_id)
+    if not dataset or dataset.session_id != session_id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dataset '{dataset_id}' not found in session '{session_id}'",
+        )
+
+    # Use the path recorded at upload time rather than reconstructing it from
+    # dataset_id: /analyze's storage filename is keyed by a locally-derived
+    # dataset_id (filename-based unless explicitly passed), which can differ
+    # from the DB's generated Dataset.dataset_id. file_path is authoritative.
+    file_path = Path(dataset.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Dataset file not found on disk")
+
+    ip_address, _ = get_client_info(request)
+    log_audit(
+        session_id=session_id,
+        action="download",
+        endpoint=f"/sessions/{session_id}/data/{dataset_id}",
+        ip_address=ip_address,
+        success=True,
+    )
+
+    media_type = "text/csv" if dataset.format == "csv" else "application/octet-stream"
+    return FileResponse(path=str(file_path), filename=dataset.filename, media_type=media_type)
+
+
+@router.get("/sessions/{session_id}/analyses/{analysis_id}", response_model=dict[str, Any])
+async def get_analysis_detail(session_id: str, analysis_id: str):
+    """Retrieve cached analysis results, scoped to the given session."""
+    analysis = get_analysis_with_relations(analysis_id)
+    if not analysis:
+        raise HTTPException(status_code=404, detail=f"Analysis '{analysis_id}' not found")
+
+    dataset = get_dataset(analysis.dataset_id)
+    if not dataset or dataset.session_id != session_id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Analysis '{analysis_id}' not found in session '{session_id}'",
+        )
+
+    return {
+        **analysis.to_dict(),
+        "dataset_profile": json.loads(analysis.profile_json) if analysis.profile_json else None,
+        "column_analysis": json.loads(analysis.column_analysis_json) if analysis.column_analysis_json else None,
+        "recommendation": json.loads(analysis.recommendation_json) if analysis.recommendation_json else None,
+    }
+
+
+@router.delete("/sessions/{session_id}", response_model=SessionDeleteResponse)
+async def delete_session_endpoint(session_id: str, request: Request = None):
+    """
+    Delete a session and all associated data (datasets, analyses, and
+    uploaded files).
+
+    Deletes uploaded files first, then the database rows: if the filesystem
+    step fails, the session row is untouched and a retry re-attempts both;
+    if it succeeds but the DB step then fails, a retry's filesystem step is
+    a safe no-op and only the DB delete needs to succeed.
+    """
+    ip_address, _ = get_client_info(request)
+
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+
+    try:
+        files_deleted, bytes_freed = get_storage_manager().delete_session(session_id)
+    except Exception as e:
+        error_msg = log_error(session_id, "delete", e)
+        log_audit(
+            session_id=session_id,
+            action="delete",
+            endpoint=f"/sessions/{session_id}",
+            ip_address=ip_address,
+            success=False,
+            error_message=str(e),
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to delete session files: {error_msg}")
+
+    try:
+        db_summary = delete_session_by_id(session_id)
+    except Exception as e:
+        error_msg = log_error(session_id, "delete", e)
+        log_audit(
+            session_id=session_id,
+            action="delete",
+            endpoint=f"/sessions/{session_id}",
+            ip_address=ip_address,
+            success=False,
+            error_message=str(e),
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to delete session database records: {error_msg}")
+
+    if db_summary is None:
+        # Session existed above but was deleted concurrently (e.g. by
+        # cleanup_expired_sessions). Files are already gone too; treat as
+        # a successful, idempotent outcome.
+        db_summary = {"datasets_deleted": 0, "analyses_deleted": 0}
+
+    log_audit(
+        session_id=session_id,
+        action="delete",
+        endpoint=f"/sessions/{session_id}",
+        ip_address=ip_address,
+        success=True,
+        metadata=json.dumps({"files_deleted": files_deleted, "bytes_freed": bytes_freed}),
+    )
+
+    return SessionDeleteResponse(
+        session_id=session_id,
+        deleted=True,
+        files_deleted=files_deleted,
+        bytes_freed=bytes_freed,
+        datasets_deleted=db_summary["datasets_deleted"],
+        analyses_deleted=db_summary["analyses_deleted"],
+        message=(
+            f"Session {session_id} deleted: {files_deleted} files ({bytes_freed} bytes), "
+            f"{db_summary['datasets_deleted']} datasets, {db_summary['analyses_deleted']} analyses removed"
+        ),
+    )
+
+
+@router.get("/storage/stats", response_model=StorageStatsResponse)
+async def get_storage_stats_endpoint():
+    """Get storage usage statistics, cross-checked against DB session/dataset counts."""
+    fs_stats = get_storage_manager().get_storage_stats()
+    return StorageStatsResponse(
+        **fs_stats,
+        db_active_sessions=count_sessions(include_expired=False),
+        db_total_datasets=count_datasets(),
+    )

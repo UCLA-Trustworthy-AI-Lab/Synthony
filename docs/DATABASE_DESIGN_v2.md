@@ -1,7 +1,7 @@
 # Database Persistence & Security Logging - Implementation v2.0
 
 **Status**: ✅ IMPLEMENTED  
-**Last Updated**: 2026-01-16  
+**Last Updated**: 2026-07-02  
 **Modules**: `database.py`, `storage.py`, `security.py`
 
 ---
@@ -116,6 +116,10 @@ MAX_SESSION_STORAGE_MB=500
 MAX_TOTAL_STORAGE_GB=10
 DATA_RETENTION_DAYS=30
 AUDIT_LOG_ENABLED=true
+
+# Opt-in: enables GET /sessions (session enumeration). Off by default --
+# see "Known Limitations" below.
+ENABLE_SESSION_LISTING=false
 ```
 
 ---
@@ -149,40 +153,156 @@ AUDIT_LOG_ENABLED=true
 
 ---
 
-### Planned Endpoints (Not Implemented)
+### Session Endpoints
 
-> **Status check (current codebase):** the database layer described above
-> (`src/synthony/api/database.py`) is real and is used internally by
-> `/analyze` and the `/systemprompt/*` routes. The REST endpoints listed
-> below were planned as part of this design but were never wired into
-> `src/synthony/api/endpoints.py` / `server.py` — there is currently no
-> way to list, retrieve, or delete sessions over the API. Retrieval/cleanup
-> is only possible by calling `database.py` functions directly (see
-> "Database Operations" below) or via `cleanup_expired_sessions()`.
+Implemented in `src/synthony/api/endpoints.py`.
 
 #### GET `/sessions`
 
-List active sessions with metadata
+List sessions with metadata. **Disabled by default** — returns `404` unless
+`ENABLE_SESSION_LISTING=true`. Unlike the other session routes, this lets a
+caller discover session_ids they don't already have, so it's opt-in (see
+"Known Limitations").
+
+Query params: `limit` (default 100, max 500), `offset` (default 0),
+`include_expired` (default `false`).
+
+```bash
+curl "http://localhost:8000/sessions?limit=50"
+```
+
+```json
+{
+  "total": 2,
+  "limit": 50,
+  "offset": 0,
+  "sessions": [
+    {"session_id": "a3f2b1c0-...", "created_at": "2026-07-01T...", "expires_at": "2026-07-31T..."}
+  ]
+}
+```
+
+Note: `ip_address` is intentionally omitted from the list view even when
+enabled (bulk IP exposure is a bigger privacy concern than a one-off lookup).
 
 #### GET `/sessions/{session_id}`
 
-Retrieve session details with all datasets and analyses
+Retrieve session details with all datasets and their analyses.
+
+```bash
+curl "http://localhost:8000/sessions/a3f2b1c0-..."
+```
+
+```json
+{
+  "session_id": "a3f2b1c0-...",
+  "created_at": "2026-07-01T...",
+  "expires_at": "2026-07-31T...",
+  "ip_address": "127.0.0.1",
+  "datasets": [
+    {
+      "dataset_id": "b4e3c2d1-...",
+      "filename": "insurance.csv",
+      "upload_status": "completed",
+      "analyses": [{"analysis_id": "...", "status": "completed", "has_recommendation": false}]
+    }
+  ]
+}
+```
+
+Returns `404` if the session doesn't exist.
 
 #### GET `/sessions/{session_id}/data/{dataset_id}`
 
-Download original uploaded file
+Download the original uploaded file.
+
+```bash
+curl -O "http://localhost:8000/sessions/a3f2b1c0-.../data/b4e3c2d1-..."
+```
+
+Returns `404` if the dataset doesn't exist, doesn't belong to that session,
+or the file is missing on disk.
 
 #### GET `/sessions/{session_id}/analyses/{analysis_id}`
 
-Retrieve cached analysis results
+Retrieve cached analysis results (dataset profile, column analysis, and
+recommendation if one was generated), scoped to the given session.
+
+```bash
+curl "http://localhost:8000/sessions/a3f2b1c0-.../analyses/c5f4d3e2-..."
+```
+
+Returns `404` if the analysis doesn't exist or belongs to a different session.
 
 #### DELETE `/sessions/{session_id}`
 
-Delete session and all associated data
+Delete a session and all associated data: uploaded files, dataset rows, and
+analysis rows (cascade).
+
+```bash
+curl -X DELETE "http://localhost:8000/sessions/a3f2b1c0-..."
+```
+
+```json
+{
+  "session_id": "a3f2b1c0-...",
+  "deleted": true,
+  "files_deleted": 1,
+  "bytes_freed": 12345,
+  "datasets_deleted": 1,
+  "analyses_deleted": 1,
+  "message": "Session a3f2b1c0-... deleted: 1 files (12345 bytes), 1 datasets, 1 analyses removed"
+}
+```
+
+Deletes files from disk first, then the database rows — see
+`get_storage_manager().delete_session()` / `delete_session_by_id()` in
+`database.py` for the retry-safety rationale. Returns `404` if the session
+doesn't exist.
 
 #### GET `/storage/stats`
 
-Get storage usage statistics
+Storage usage statistics, combining filesystem counts with a DB cross-check.
+
+```bash
+curl "http://localhost:8000/storage/stats"
+```
+
+```json
+{
+  "total_size_gb": 0.012,
+  "storage_limit_gb": 10,
+  "usage_percent": 0.12,
+  "active_sessions": 3,
+  "total_datasets": 5,
+  "db_active_sessions": 3,
+  "db_total_datasets": 5
+}
+```
+
+`active_sessions`/`total_datasets` count session directories present on disk
+(`storage.py::get_storage_stats`), regardless of whether the DB considers
+them expired. `db_active_sessions` counts only non-expired sessions per
+`count_sessions(include_expired=False)`. The two are expected to diverge on
+a long-lived deployment: a large gap (filesystem count >> DB active count)
+means expired sessions aren't being cleaned up from disk, which is exactly
+what this cross-check is for — it's not a bug if they don't match.
+
+---
+
+## Known Limitations
+
+- **No authentication.** No auth middleware exists anywhere in this API.
+  `session_id` (an unguessable UUID) is the sole thing gating access to a
+  dataset's contents — the same trust model `/analyze` and `/recommend`
+  already rely on. Detail/delete/download-by-known-ID routes above are
+  consistent with that; they don't introduce a new exposure.
+- **`GET /sessions` is the one new capability**: nothing before this let a
+  caller discover session_ids they don't already have. It's gated behind
+  `ENABLE_SESSION_LISTING` (default off) and strips `ip_address` from its
+  response for that reason.
+- Recommended for internal/trusted-network deployments; not intended to be
+  exposed to the public internet without an auth layer in front of it.
 
 ---
 
@@ -245,15 +365,18 @@ log_audit(session_id, action, endpoint, ip_address, success=True)
 
 # Cleanup expired sessions
 count = cleanup_expired_sessions()
+
+# Session listing/detail (backing the REST endpoints above)
+sessions = list_sessions(include_expired=False, limit=100, offset=0)
+total = count_sessions(include_expired=False)
+detail = get_session_with_details(session_id)  # eager-loaded, safe to nest
+analysis = get_analysis_with_relations(analysis_id)  # eager-loaded system_prompt
+summary = delete_session_by_id(session_id)  # {datasets_deleted, analyses_deleted}
 ```
 
 ---
 
 ## UI Integration Workflow
-
-> **Note:** this workflow assumes the `/sessions/*` endpoints above are
-> live. As of this writing they are not implemented — this section
-> describes the intended frontend integration once they are.
 
 ### Frontend Upload Flow
 
@@ -355,8 +478,8 @@ Old endpoints still work, new fields added to responses.
 ### Monitoring
 
 ```bash
-# Check storage usage (endpoint not implemented; query the DB directly instead)
-sqlite3 data/synthony.db "SELECT COUNT(*), SUM(file_size) FROM datasets"
+# Check storage usage
+curl http://localhost:8000/storage/stats
 
 # View audit logs  
 sqlite3 data/synthony.db "SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 10"
