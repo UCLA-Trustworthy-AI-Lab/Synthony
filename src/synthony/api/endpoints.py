@@ -77,7 +77,7 @@ async def root():
     """Root endpoint with API information."""
     return {
         "message": "Synthony - Data Analysis & Model Recommendation API",
-        "version": "0.1.0",
+        "version": "0.1.1",
         "docs": "/docs",
         "health": "/health",
     }
@@ -95,7 +95,7 @@ async def health_check():
 
     return HealthResponse(
         status="healthy" if analyzer and recommender else "unhealthy",
-        version="0.1.0",
+        version="0.1.1",
         analyzer_available=analyzer is not None,
         recommender_available=recommender is not None,
         llm_available=llm_available,

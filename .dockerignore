@@ -56,6 +56,8 @@ docs/
 # Tests (not needed in production image)
 tests/
 test_*.py
+!tests/functional/test_api_advanced.py
+!tests/functional/test_llm_with_systemprompt.py
 
 # Development files
 *.md

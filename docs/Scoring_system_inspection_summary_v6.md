@@ -1,5 +1,10 @@
 # Scoring System Inspection Summary - v6
 
+> **Superseded.** The registry has since been recalibrated to `7.0.0`
+> against spark benchmarks (10 datasets, 14 models, density-normalized
+> cardinality scoring) — a different benchmark source than the trial4
+> run this document validates. See `config/model_capabilities.json`.
+
 **Date**: 2026-02-04
 **Benchmark Source**: `output/benchmark/trial4/analysis_comparison.json`
 **Methodology Reference**: `docs/scoring_methodology.md`

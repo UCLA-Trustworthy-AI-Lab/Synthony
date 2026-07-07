@@ -3,7 +3,8 @@
     "version": "6.0.0",
     "last_updated": "2026-02-04",
     "source": "trial4 benchmarks (analysis_comparison.json) + literature for non-benchmarked models",
-    "description": "Model capabilities calibrated against empirical benchmark results from trial4 (8 datasets, 11 models). See docs/Scoring_system_inspection_summary_v6.md for methodology and change log."
+    "description": "Model capabilities calibrated against empirical benchmark results from trial4 (8 datasets, 11 models). See docs/Scoring_system_inspection_summary_v6.md for methodology and change log.",
+    "_deprecated_notice": "SUPERSEDED. This is a historical snapshot, not read by any code. The live registry is config/model_capabilities.json, currently at version 7.0.0 (recalibrated against spark benchmarks: 10 datasets, 14 models, density-normalized cardinality scoring). This v6 snapshot still lists GaussianCopula, TabTree, and PATE-CTGAN, all removed/renamed in v7 (PATE-CTGAN -> PATECTGAN)."
   },
   "models": {
     "GReaT": {
