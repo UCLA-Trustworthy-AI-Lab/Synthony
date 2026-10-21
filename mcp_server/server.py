@@ -30,6 +30,7 @@ from mcp.types import (
 )
 
 # Import Synthony core components
+from synthony.agents.manager import RunManager
 from synthony.core.analyzer import StochasticDataAnalyzer
 from synthony.core.column_analyzer import ColumnAnalyzer
 from synthony.recommender.engine import ModelRecommendationEngine
@@ -38,6 +39,7 @@ from synthony.recommender.engine import ModelRecommendationEngine
 from synthony.api.database import get_active_prompt
 
 # Import MCP server components
+from mcp_server.tools.agent_tools import AgentTools
 from mcp_server.tools.data_tools import DataTools
 from mcp_server.tools.profiling_tools import ProfilingTools
 from mcp_server.tools.model_tools import ModelTools
@@ -103,6 +105,11 @@ class SynthonyMCPServer:
         self.model_tools = ModelTools(self.recommender)
         self.recommendation_tools = RecommendationTools(self.recommender)
         self.benchmark_tools = BenchmarkTools()
+        # RunManager is transport-agnostic asyncio (Phase 3/4) -- works
+        # identically in this long-lived stdio process as it does under
+        # uvicorn; AgentTools stamps its own owner ID on every run it starts.
+        self.run_manager = RunManager(engine=self.recommender)
+        self.agent_tools = AgentTools(self.run_manager)
         self.model_registry = ModelRegistry(self.recommender)
         self.profile_cache = ProfileCache()
         self.benchmark_data = BenchmarkData()
@@ -139,6 +146,9 @@ class SynthonyMCPServer:
             # Benchmark tools
             tools.extend(self.benchmark_tools.get_tool_definitions())
 
+            # Agent tools (Agentic Mode Phase 5)
+            tools.extend(self.agent_tools.get_tool_definitions())
+
             logger.info(f"Listed {len(tools)} tools")
             return tools
 
@@ -167,6 +177,8 @@ class SynthonyMCPServer:
                     result = await self.recommendation_tools.execute_tool(name, arguments)
                 elif name in self.benchmark_tools.get_tool_names():
                     result = await self.benchmark_tools.execute_tool(name, arguments)
+                elif name in self.agent_tools.get_tool_names():
+                    result = await self.agent_tools.execute_tool(name, arguments)
                 else:
                     raise ValueError(f"Unknown tool: {name}")
 
@@ -292,6 +304,10 @@ class SynthonyMCPServer:
     async def run(self):
         """Run the MCP server with stdio transport."""
         logger.info("Starting Synthony MCP Server on stdio transport")
+
+        recovered = await self.run_manager.startup_recovery()
+        if recovered:
+            logger.warning(f"Marked {recovered} orphaned run(s) from a prior crash as failed")
 
         async with stdio_server() as (read_stream, write_stream):
             await self.server.run(

@@ -9,7 +9,10 @@ Provides:
 - Security audit logging
 """
 
+import json
 import os
+import sqlite3
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -18,18 +21,33 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
     create_engine,
+    event,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session as DBSession
 from sqlalchemy.orm import joinedload, relationship, sessionmaker
 
 Base = declarative_base()
+
+
+def _safe_json_loads(value: str | None) -> object:
+    """json.loads() that degrades to the raw string on invalid JSON instead
+    of raising -- needed for RunStep.input_json/output_json, which may have
+    been byte-truncated mid-structure by _truncate_json before storage."""
+    if value is None:
+        return None
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return value
 
 
 # ============================================================================
@@ -191,12 +209,138 @@ class AuditLog(Base):
         }
 
 
+class Run(Base):
+    """Agentic-mode orchestration run (Phase 2: persistence only; the
+    orchestrator that actually drives status transitions lands in Phase 3).
+    """
+
+    __tablename__ = "runs"
+
+    run_id = Column(String(36), primary_key=True)
+    session_id = Column(
+        String(36), ForeignKey("sessions.session_id", ondelete="SET NULL"), nullable=True
+    )
+    dataset_id = Column(
+        String(36), ForeignKey("datasets.dataset_id", ondelete="SET NULL"), nullable=True
+    )
+    mode = Column(String(20), nullable=False)  # "advise" | "full"
+    status = Column(String(20), nullable=False, default="pending")
+    owner = Column(String(64))  # process/worker identity, for MCP cancel ownership
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    config_json = Column(Text, nullable=True)
+    result_json = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    current_iteration = Column(Integer, default=0)
+    llm_provider = Column(String(20), nullable=True)
+    llm_model = Column(String(100), nullable=True)
+    total_input_tokens = Column(Integer, default=0)
+    total_output_tokens = Column(Integer, default=0)
+    total_cost_usd = Column(Float, default=0.0)
+
+    steps = relationship(
+        "RunStep", back_populates="run", cascade="all, delete-orphan", order_by="RunStep.step_id"
+    )
+
+    __table_args__ = (
+        Index("idx_run_status", "status"),
+        Index("idx_run_created", "created_at"),
+    )
+
+    def to_dict(self):
+        """Serialize to dictionary, including parsed config/result payloads."""
+        return {
+            "run_id": self.run_id,
+            "session_id": self.session_id,
+            "dataset_id": self.dataset_id,
+            "mode": self.mode,
+            "status": self.status,
+            "owner": self.owner,
+            "created_at": self.created_at.isoformat(),
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+            "current_iteration": self.current_iteration,
+            "llm_provider": self.llm_provider,
+            "llm_model": self.llm_model,
+            "total_input_tokens": self.total_input_tokens,
+            "total_output_tokens": self.total_output_tokens,
+            "total_cost_usd": self.total_cost_usd,
+            "config": json.loads(self.config_json) if self.config_json else None,
+            "result": json.loads(self.result_json) if self.result_json else None,
+            "error_message": self.error_message,
+        }
+
+
+class RunStep(Base):
+    """One recorded step of a run, written by agents/monitoring.py's StepRecorder."""
+
+    __tablename__ = "run_steps"
+
+    step_id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(String(36), ForeignKey("runs.run_id", ondelete="CASCADE"), nullable=False)
+    iteration = Column(Integer, default=0)
+    agent = Column(String(50), nullable=False)
+    step_name = Column(String(100), nullable=False)
+    status = Column(String(20), nullable=False, default="running")
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    finished_at = Column(DateTime, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    input_json = Column(Text, nullable=True)  # truncated to ~16KB, see _truncate_json
+    output_json = Column(Text, nullable=True)  # truncated to ~16KB, see _truncate_json
+    error_message = Column(Text, nullable=True)
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    cost_usd = Column(Float, default=0.0)
+
+    run = relationship("Run", back_populates="steps")
+
+    __table_args__ = (Index("idx_run_step_run_id", "run_id"),)
+
+    def to_dict(self):
+        """Serialize to dictionary, including parsed input/output payloads.
+
+        input_json/output_json are byte-truncated before storage (see
+        _truncate_json), which can leave invalid JSON if the cut landed
+        mid-structure -- fall back to the raw truncated string rather than
+        raising, so an oversized payload degrades to "less structured",
+        not "endpoint 500s".
+        """
+        return {
+            "step_id": self.step_id,
+            "run_id": self.run_id,
+            "iteration": self.iteration,
+            "agent": self.agent,
+            "step_name": self.step_name,
+            "status": self.status,
+            "started_at": self.started_at.isoformat(),
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+            "duration_ms": self.duration_ms,
+            "input": _safe_json_loads(self.input_json),
+            "output": _safe_json_loads(self.output_json),
+            "error_message": self.error_message,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "cost_usd": self.cost_usd,
+        }
+
+
+class SchemaMeta(Base):
+    """Tiny key-value table for future schema-version tracking (no Alembic yet)."""
+
+    __tablename__ = "schema_meta"
+
+    key = Column(String(50), primary_key=True)
+    value = Column(String(255), nullable=False)
+
+
 # ============================================================================
 # Database Session Management
 # ============================================================================
 
 _engine = None
 _SessionLocal = None
+_CURRENT_SCHEMA_VERSION = "2"  # bumped when runs/run_steps/schema_meta were added
 
 
 def get_database_url() -> str:
@@ -225,18 +369,75 @@ def init_database(database_url: str | None = None):
         connect_args = {"timeout": 30, "check_same_thread": False}
     _engine = create_engine(database_url, echo=echo, connect_args=connect_args)
 
-    # Create tables (handle race condition with multiple workers)
-    try:
-        Base.metadata.create_all(bind=_engine)
-    except Exception as e:
-        # Ignore "table already exists" errors from concurrent worker startup
-        if "already exists" not in str(e).lower():
-            raise
+    if database_url.startswith("sqlite"):
+        # WAL lets readers (API) and writers (agent runs, MCP) share the file
+        # concurrently instead of blocking on SQLite's default file lock;
+        # busy_timeout backstops the remaining brief writer-vs-writer waits.
+        def _set_sqlite_pragma(dbapi_connection, _connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA busy_timeout=30000")
+            _enable_wal(cursor)
+            cursor.close()
+
+        event.listen(_engine, "connect", _set_sqlite_pragma)
+
+    # Create tables (handle race condition with multiple workers). If another
+    # worker creates a table between create_all's existence check and its CREATE,
+    # that CREATE fails with "already exists" and create_all stops early -- so
+    # retry until it completes; existing tables are skipped on each pass.
+    for attempt in range(len(Base.metadata.tables) + 1):
+        try:
+            Base.metadata.create_all(bind=_engine)
+            break
+        except Exception as e:
+            if "already exists" not in str(e).lower() or attempt == len(Base.metadata.tables):
+                raise
 
     # Create session factory
     _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 
+    _ensure_schema_meta()
+
     print(f"✓ Database initialized: {database_url}")
+
+
+def _enable_wal(cursor, attempts: int = 100, delay_s: float = 0.05):
+    """Switch the database file to WAL, tolerating concurrently starting workers.
+
+    While another connection holds a write lock, SQLite fails the switch
+    immediately with "database is locked" (busy_timeout is not consulted), which
+    crashed one of the two uvicorn workers in the Docker image. WAL is persisted
+    in the file, so once any worker has switched it the others just see "wal".
+    """
+    for attempt in range(attempts):
+        try:
+            if cursor.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal":
+                return
+            cursor.execute("PRAGMA journal_mode=WAL")
+            return
+        except sqlite3.OperationalError as e:
+            if "locked" not in str(e) or attempt == attempts - 1:
+                raise
+            time.sleep(delay_s)
+
+
+def _ensure_schema_meta():
+    """Seed the schema_version row on first init; leave it alone otherwise
+    (a real migration path can read/compare this once one exists)."""
+    db = _SessionLocal()
+    try:
+        existing = db.query(SchemaMeta).filter(SchemaMeta.key == "schema_version").first()
+        if not existing:
+            db.add(SchemaMeta(key="schema_version", value=_CURRENT_SCHEMA_VERSION))
+            try:
+                db.commit()
+            except IntegrityError:
+                # Another uvicorn worker seeded the row between our check and
+                # insert (same startup race as create_all above); its row is
+                # the one we wanted, so there is nothing left to do.
+                db.rollback()
+    finally:
+        db.close()
 
 
 def get_db_session() -> DBSession:
@@ -671,6 +872,278 @@ def get_dataset_profile(profile_id: str) -> dict | None:
     """
     analysis = get_analysis(profile_id)
     if analysis and analysis.profile_json:
-        import json
         return json.loads(analysis.profile_json)
     return None
+
+
+# ============================================================================
+# Run Persistence (Agentic Mode Phase 2)
+# ============================================================================
+#
+# Run/RunStep rows are written by agents/monitoring.py's StepRecorder (and,
+# from Phase 3, the orchestrator) and read by the read-only /runs API
+# (api/run_endpoints.py). output_json/input_json are truncated before
+# storage so a verbose tool result can't blow up row size unboundedly.
+
+_MAX_STEP_IO_BYTES = 16 * 1024
+
+
+def _truncate_json(value: str | None, max_bytes: int = _MAX_STEP_IO_BYTES) -> str | None:
+    """Byte-cap a JSON string for storage, keeping it valid UTF-8 even if the
+    cut lands mid-character. Truncated values are for human/log inspection,
+    not re-parsed as JSON."""
+    if value is None:
+        return None
+    encoded = value.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return value
+    return encoded[:max_bytes].decode("utf-8", errors="ignore") + "...<truncated>"
+
+
+def create_run(
+    mode: str,
+    session_id: str | None = None,
+    dataset_id: str | None = None,
+    owner: str | None = None,
+    config: dict | None = None,
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+) -> Run:
+    """Create a new run in 'pending' status."""
+    db = get_db_session()
+    try:
+        run = Run(
+            run_id=str(uuid4()),
+            session_id=session_id,
+            dataset_id=dataset_id,
+            mode=mode,
+            status="pending",
+            owner=owner,
+            config_json=json.dumps(config) if config is not None else None,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+        )
+        db.add(run)
+        db.commit()
+        db.refresh(run)
+        return run
+    finally:
+        db.close()
+
+
+def update_run_status(run_id: str, status: str, error_message: str | None = None) -> Run | None:
+    """Transition a run's status. Stamps started_at the first time it leaves
+    'pending', so status is always persisted before the corresponding stage
+    starts doing work (a crash mid-stage leaves a truthful status)."""
+    db = get_db_session()
+    try:
+        run = db.query(Run).filter(Run.run_id == run_id).first()
+        if not run:
+            return None
+        run.status = status
+        if status != "pending" and run.started_at is None:
+            run.started_at = datetime.utcnow()
+        if error_message is not None:
+            run.error_message = error_message
+        db.commit()
+        db.refresh(run)
+        return run
+    finally:
+        db.close()
+
+
+def set_run_iteration(run_id: str, iteration: int) -> Run | None:
+    """Persists the current iteration number (Phase 4 full-mode loop)."""
+    db = get_db_session()
+    try:
+        run = db.query(Run).filter(Run.run_id == run_id).first()
+        if not run:
+            return None
+        run.current_iteration = iteration
+        db.commit()
+        db.refresh(run)
+        return run
+    finally:
+        db.close()
+
+
+def finish_run(
+    run_id: str, status: str, result: dict | None = None, error_message: str | None = None
+) -> Run | None:
+    """Mark a run as finished (completed/failed/cancelled), stamping finished_at."""
+    db = get_db_session()
+    try:
+        run = db.query(Run).filter(Run.run_id == run_id).first()
+        if not run:
+            return None
+        run.status = status
+        run.finished_at = datetime.utcnow()
+        if result is not None:
+            run.result_json = json.dumps(result)
+        if error_message is not None:
+            run.error_message = error_message
+        db.commit()
+        db.refresh(run)
+        return run
+    finally:
+        db.close()
+
+
+def delete_run(run_id: str) -> bool:
+    """Delete a run; cascades to its steps via the ORM relationship cascade."""
+    db = get_db_session()
+    try:
+        run = db.query(Run).filter(Run.run_id == run_id).first()
+        if not run:
+            return False
+        db.delete(run)
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+
+def add_run_step(
+    run_id: str,
+    agent: str,
+    step_name: str,
+    iteration: int = 0,
+    input_data: dict | None = None,
+) -> RunStep:
+    """Insert a running (in-progress) step row. Returns the row so the
+    caller (StepRecorder) can finish it later via finish_run_step()."""
+    db = get_db_session()
+    try:
+        step = RunStep(
+            run_id=run_id,
+            iteration=iteration,
+            agent=agent,
+            step_name=step_name,
+            status="running",
+            input_json=_truncate_json(json.dumps(input_data)) if input_data is not None else None,
+        )
+        db.add(step)
+        db.commit()
+        db.refresh(step)
+        return step
+    finally:
+        db.close()
+
+
+def finish_run_step(
+    step_id: int,
+    status: str,
+    output_data: dict | None = None,
+    error_message: str | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cost_usd: float = 0.0,
+) -> RunStep | None:
+    """Complete a step: stamps finished_at/duration_ms, stores truncated
+    output and any per-step token/cost accounting."""
+    db = get_db_session()
+    try:
+        step = db.query(RunStep).filter(RunStep.step_id == step_id).first()
+        if not step:
+            return None
+        step.status = status
+        step.finished_at = datetime.utcnow()
+        step.duration_ms = int((step.finished_at - step.started_at).total_seconds() * 1000)
+        if output_data is not None:
+            step.output_json = _truncate_json(json.dumps(output_data))
+        if error_message is not None:
+            step.error_message = error_message
+        step.input_tokens = input_tokens
+        step.output_tokens = output_tokens
+        step.cost_usd = cost_usd
+        db.commit()
+        db.refresh(step)
+        return step
+    finally:
+        db.close()
+
+
+def accumulate_run_usage(
+    run_id: str, input_tokens: int = 0, output_tokens: int = 0, cost_usd: float = 0.0
+) -> Run | None:
+    """Roll per-call LLM usage up into the run's running totals."""
+    db = get_db_session()
+    try:
+        run = db.query(Run).filter(Run.run_id == run_id).first()
+        if not run:
+            return None
+        run.total_input_tokens = (run.total_input_tokens or 0) + input_tokens
+        run.total_output_tokens = (run.total_output_tokens or 0) + output_tokens
+        run.total_cost_usd = (run.total_cost_usd or 0.0) + cost_usd
+        db.commit()
+        db.refresh(run)
+        return run
+    finally:
+        db.close()
+
+
+def get_run(run_id: str) -> Run | None:
+    """Retrieve a run by ID, without its steps."""
+    db = get_db_session()
+    try:
+        return db.query(Run).filter(Run.run_id == run_id).first()
+    finally:
+        db.close()
+
+
+def get_run_with_steps(run_id: str) -> dict | None:
+    """Fetch a run plus its steps, materialized to a dict while the DB
+    session is still open (see get_session_with_details for why)."""
+    db = get_db_session()
+    try:
+        run = (
+            db.query(Run)
+            .options(joinedload(Run.steps))
+            .filter(Run.run_id == run_id)
+            .first()
+        )
+        if not run:
+            return None
+        result = run.to_dict()
+        result["steps"] = [s.to_dict() for s in run.steps]
+        return result
+    finally:
+        db.close()
+
+
+def list_run_steps(run_id: str) -> list[RunStep]:
+    """List a run's steps in execution order."""
+    db = get_db_session()
+    try:
+        return (
+            db.query(RunStep)
+            .filter(RunStep.run_id == run_id)
+            .order_by(RunStep.step_id)
+            .all()
+        )
+    finally:
+        db.close()
+
+
+def list_runs(status: str | None = None, limit: int = 100, offset: int = 0) -> list[Run]:
+    """List runs, most recent first."""
+    db = get_db_session()
+    try:
+        query = db.query(Run)
+        if status is not None:
+            query = query.filter(Run.status == status)
+        return query.order_by(Run.created_at.desc()).offset(offset).limit(limit).all()
+    finally:
+        db.close()
+
+
+def count_runs(status: str | None = None) -> int:
+    """Total run count, for /runs pagination metadata."""
+    db = get_db_session()
+    try:
+        query = db.query(Run)
+        if status is not None:
+            query = query.filter(Run.status == status)
+        return query.count()
+    finally:
+        db.close()

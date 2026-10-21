@@ -4,17 +4,12 @@ synthony.api.database, independent of the HTTP layer.
 
 database.py uses module-level globals (_engine, _SessionLocal) for its
 connection pool, so each test points them at an isolated temp SQLite file
-via init_database() and restores the prior globals afterward -- this keeps
-the test order-independent regardless of what else runs in the same pytest
-session (e.g. functional tests that initialize the real app DB).
+via the shared `isolated_db` fixture (tests/conftest.py) and restores the
+prior globals afterward -- this keeps the test order-independent regardless
+of what else runs in the same pytest session (e.g. functional tests that
+initialize the real app DB).
 """
 
-import tempfile
-from pathlib import Path
-
-import pytest
-
-from synthony.api import database as db_module
 from synthony.api.database import (
     count_datasets,
     count_sessions,
@@ -24,21 +19,8 @@ from synthony.api.database import (
     delete_session_by_id,
     get_analysis_with_relations,
     get_session_with_details,
-    init_database,
     list_sessions,
 )
-
-
-@pytest.fixture
-def isolated_db():
-    """Point database.py's global connection at a fresh temp SQLite file,
-    restoring the prior state afterward."""
-    prior_engine, prior_session_local = db_module._engine, db_module._SessionLocal
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        db_path = Path(tmp_dir) / "test.db"
-        init_database(f"sqlite:///{db_path}")
-        yield
-    db_module._engine, db_module._SessionLocal = prior_engine, prior_session_local
 
 
 def _make_session_with_dataset(retention_days: int = 30):
