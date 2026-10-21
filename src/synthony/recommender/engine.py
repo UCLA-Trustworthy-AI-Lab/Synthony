@@ -10,12 +10,15 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
 from synthony.core.schemas import ColumnAnalysisResult, DatasetProfile
 from synthony.recommender.focus_profiles import get_scale_factors
+
+if TYPE_CHECKING:
+    from synthony.llm import LLMClient
 
 
 @dataclass
@@ -193,6 +196,7 @@ class ModelRecommendationEngine:
         openai_api_key: Optional[str] = None,
         openai_model: str = "gpt-4o",
         openai_base_url: Optional[str] = None,
+        llm_client: Optional["LLMClient"] = None,
     ):
         """Initialize recommendation engine.
 
@@ -203,6 +207,9 @@ class ModelRecommendationEngine:
             openai_api_key: OpenAI API key (or set OPENAI_API_KEY env var)
             openai_model: OpenAI model to use (default: gpt-4o)
             openai_base_url: Optional base URL for OpenAI-compatible API (e.g., VLLM)
+            llm_client: Provider-agnostic LLM client (synthony.llm). When given,
+                LLM/hybrid calls route through it and the openai_* arguments are
+                ignored; when None, the legacy direct-OpenAI path is used.
         """
         # Configuration
         self.config = config or DEFAULT_ENGINE_CONFIG
@@ -283,6 +290,14 @@ class ModelRecommendationEngine:
         self.openai_model = openai_model
         self.openai_base_url = openai_base_url
 
+        # Provider-agnostic client takes precedence over the legacy OpenAI path
+        self.llm_client = llm_client
+        if llm_client is not None:
+            self.openai_client = None
+            self.openai_model = llm_client.model
+            self.llm_available = True
+            return
+
         # Try to import OpenAI (optional dependency)
         try:
             from openai import OpenAI
@@ -323,11 +338,20 @@ class ModelRecommendationEngine:
         try:
             from openai import OpenAI
 
+            from synthony.llm.factory import _discover_vllm_model
+
             vllm_key = os.getenv("VLLM_API_KEY", "EMPTY")
-            vllm_model = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-32B-Instruct")
+            vllm_model = os.getenv("VLLM_MODEL")
 
             client = OpenAI(api_key=vllm_key, base_url=vllm_url)
-            client.models.list()
+            if vllm_model:
+                client.models.list()  # still verify connectivity
+            else:
+                # Ask the server what it's actually serving instead of
+                # assuming a fixed name -- this is what caught the server
+                # having been swapped from Qwen/Qwen2.5-32B-Instruct to
+                # gpt-oss-120b. Also serves as the connectivity check.
+                vllm_model = _discover_vllm_model(client)
 
             self.openai_client = client
             self.openai_api_key = vllm_key
@@ -789,6 +813,30 @@ class ModelRecommendationEngine:
             excluded_models=excluded_models,
         )
 
+    def _call_llm_json(self, system_message: str, prompt: str) -> Dict[str, Any]:
+        """Run one JSON-mode LLM call via the injected client or legacy OpenAI path."""
+        if self.llm_client is not None:
+            from synthony.llm import LLMMessage
+
+            response = self.llm_client.complete_sync(
+                [LLMMessage(role="user", content=prompt)],
+                system=system_message,
+                json_mode=True,
+                temperature=0.3,
+            )
+            return json.loads(response.text or "{}")
+
+        response = self.openai_client.chat.completions.create(
+            model=self.openai_model,
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,  # Lower temperature for more deterministic results
+            response_format={"type": "json_object"},
+        )
+        return json.loads(response.choices[0].message.content)
+
     def _recommend_llm(
         self,
         dataset_profile: DatasetProfile,
@@ -798,7 +846,7 @@ class ModelRecommendationEngine:
     ) -> RecommendationResult:
         """LLM-based recommendation using OpenAI API with SystemPrompt."""
 
-        if not self.llm_available or not self.openai_client:
+        if not self.llm_available or not (self.openai_client or self.llm_client):
             raise RuntimeError(
                 "LLM recommendation requires openai package and API key. "
                 "Install with: pip install openai"
@@ -829,23 +877,13 @@ Consider:
 Return recommendations in JSON format with clear reasoning."""
             print(f"⚠ Using default prompt (SystemPrompt not loaded)")
 
-        # Call OpenAI API
+        # Call LLM
         try:
-            response = self.openai_client.chat.completions.create(
-                model=self.openai_model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.3,  # Lower temperature for more deterministic results
-                response_format={"type": "json_object"},
-            )
-
-            llm_response = json.loads(response.choices[0].message.content)
+            llm_response = self._call_llm_json(system_message, prompt)
             print(f"✓ LLM response received (model: {self.openai_model})")
 
         except Exception as e:
-            raise RuntimeError(f"OpenAI API call failed: {e}")
+            raise RuntimeError(f"LLM API call failed: {e}")
 
         # Parse LLM response and build recommendations
         return self._parse_llm_response(
@@ -890,17 +928,7 @@ Return recommendations in JSON format with clear reasoning."""
             print(f"⚠ Hybrid mode: Using default prompt")
 
         try:
-            response = self.openai_client.chat.completions.create(
-                model=self.openai_model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.3,
-                response_format={"type": "json_object"},
-            )
-
-            llm_response = json.loads(response.choices[0].message.content)
+            llm_response = self._call_llm_json(system_message, prompt)
             print(f"✓ LLM reasoning added to hybrid recommendation")
 
             # Use LLM's ranking but keep rule-based structure
@@ -957,8 +985,10 @@ Return recommendations in JSON format with clear reasoning."""
     ) -> str:
         """Build prompt for LLM recommendation."""
         
-        # Serialize dataset profile and column analysis
-        profile_json = dataset_profile.model_dump_json(indent=2)
+        # Serialize dataset profile and column analysis. Use to_json(), not
+        # model_dump_json() directly: real profiles carry a pandas DataFrame
+        # in correlation.correlation_matrix that only to_json() excludes.
+        profile_json = dataset_profile.to_json()
         column_json = (
             column_analysis.model_dump_json(indent=2) if column_analysis else "null"
         )
@@ -1055,6 +1085,27 @@ Return ONLY valid JSON."""
 
         return prompt
 
+    @staticmethod
+    def _coerce_model_name(entry: Any) -> Optional[str]:
+        """The LLM's JSON schema asks for plain model-name strings, but
+        weaker instruction-following (observed with a self-hosted vLLM
+        model, gpt-oss-120b) sometimes wraps them instead, e.g.
+        ``{"model": "SMOTE", "score": 0.979}``. Non-deterministic across
+        calls to the *same* model on the *same* prompt -- most responses
+        are plain strings, occasionally one isn't. Accept either shape
+        rather than raising `TypeError: unhashable type: 'dict'` on a dict
+        used as a lookup key; return None for anything unrecognizable so
+        the caller can skip it instead of crashing.
+        """
+        if isinstance(entry, str):
+            return entry
+        if isinstance(entry, dict):
+            for key in ("model", "model_name", "name"):
+                value = entry.get(key)
+                if isinstance(value, str):
+                    return value
+        return None
+
     def _parse_llm_response(
         self,
         llm_response: Dict[str, Any],
@@ -1064,8 +1115,13 @@ Return ONLY valid JSON."""
         top_n: int,
     ) -> RecommendationResult:
         """Parse LLM JSON response into RecommendationResult."""
-        
-        recommended_name = llm_response["recommended_model"]
+
+        recommended_name = self._coerce_model_name(llm_response["recommended_model"])
+        if recommended_name is None:
+            raise ValueError(
+                f"LLM response's recommended_model is neither a string nor a "
+                f"recognizable object: {llm_response['recommended_model']!r}"
+            )
         reasoning_text = llm_response["reasoning"]
         alternatives_list = llm_response.get("alternatives", [])
         warnings_list = llm_response.get("warnings", [])
@@ -1084,8 +1140,9 @@ Return ONLY valid JSON."""
 
         # Build alternatives
         alternatives = []
-        for alt_name in alternatives_list[:top_n]:
-            if alt_name in self.models:
+        for alt_entry in alternatives_list[:top_n]:
+            alt_name = self._coerce_model_name(alt_entry)
+            if alt_name is not None and alt_name in self.models:
                 alt_info = self.models[alt_name]
                 alternatives.append(
                     ModelRecommendation(
