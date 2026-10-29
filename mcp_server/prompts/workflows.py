@@ -85,6 +85,27 @@ class WorkflowPrompts:
                     }
                 ]
             },
+            {
+                "name": "agentic-synthesis",
+                "description": (
+                    "Run an agentic synthesis end to end: start a run, poll it to completion, "
+                    "and interpret the result. mode='advise' just recommends a model; "
+                    "mode='full' actually trains, generates, and benchmarks it, iterating on "
+                    "its own if the quality threshold isn't met on the first attempt."
+                ),
+                "arguments": [
+                    {
+                        "name": "dataset_name",
+                        "description": "Dataset name, as returned by list_datasets",
+                        "required": True
+                    },
+                    {
+                        "name": "mode",
+                        "description": "'advise' (recommend only) or 'full' (train + generate + benchmark); defaults to 'advise'",
+                        "required": False
+                    }
+                ]
+            },
         ]
 
     async def get_prompt(self, name: str, arguments: Dict[str, str]) -> Dict[str, Any]:
@@ -97,6 +118,8 @@ class WorkflowPrompts:
             return await self._validate_recommendation(arguments)
         elif name == "update-knowledge-base":
             return await self._update_knowledge_base(arguments)
+        elif name == "agentic-synthesis":
+            return await self._agentic_synthesis(arguments)
         else:
             raise ValueError(f"Unknown prompt: {name}")
 
@@ -237,4 +260,40 @@ SystemPrompt scores should reflect empirical evidence, not just theoretical expe
         return {
             "messages": messages,
             "description": "Update knowledge base based on empirical feedback"
+        }
+
+    async def _agentic_synthesis(self, arguments: Dict[str, str]) -> Dict[str, Any]:
+        """Generate agentic-synthesis workflow prompt."""
+        dataset_name = arguments.get("dataset_name", "[dataset_name]")
+        mode = arguments.get("mode", "advise")
+
+        messages = [
+            {
+                "role": "user",
+                "content": f"""I want to run an agentic synthesis on my dataset and see it through to completion.
+
+Dataset: {dataset_name}
+Mode: {mode}
+
+Please:
+1. Call run_agentic_synthesis with dataset_name="{dataset_name}" and mode="{mode}" -- this returns immediately with a run_id.
+2. Call get_run_status with that run_id, repeating every few seconds until status is one of completed / failed / cancelled.
+3. While polling, status will move through PENDING -> PROFILING -> REASONING -> COMPLETED (mode="advise"), \
+or PENDING -> PROFILING -> REASONING -> TRAINING -> BENCHMARKING -> (if below quality_threshold) \
+ITERATING -> REASONING -> ... -> COMPLETED (mode="full").
+4. Once terminal, summarize the result for me:
+   - advise mode: the ranked candidate models and the reasoning behind the top pick.
+   - full mode: which model was actually trained, its benchmark quality score, whether \
+met_threshold is true, and how many iterations it took.
+5. If status is "failed", read error_message and the last few steps' output to explain what went wrong.
+
+Use run_agentic_synthesis and get_run_status. If you need to stop it early, use cancel_run \
+with the same run_id (only works on runs you started in this session).
+"""
+            }
+        ]
+
+        return {
+            "messages": messages,
+            "description": "Run an agentic synthesis end to end and interpret the result"
         }

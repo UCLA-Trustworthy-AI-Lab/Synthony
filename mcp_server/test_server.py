@@ -25,6 +25,9 @@ def test_imports():
     from mcp_server.tools.recommendation_tools import RecommendationTools  # noqa: F401
     print("✓ RecommendationTools imported successfully")
 
+    from mcp_server.tools.agent_tools import AgentTools  # noqa: F401
+    print("✓ AgentTools imported successfully")
+
     from mcp_server.resources.model_registry import ModelRegistry  # noqa: F401
     print("✓ ModelRegistry imported successfully")
 
@@ -42,9 +45,11 @@ def test_tool_definitions():
     """Test that tool definitions are properly structured."""
     print("\nTesting tool definitions...")
 
+    from synthony.agents.manager import RunManager
     from synthony.core.analyzer import StochasticDataAnalyzer
     from synthony.core.column_analyzer import ColumnAnalyzer
     from synthony.recommender.engine import ModelRecommendationEngine
+    from mcp_server.tools.agent_tools import AgentTools
     from mcp_server.tools.profiling_tools import ProfilingTools
     from mcp_server.tools.model_tools import ModelTools
     from mcp_server.tools.recommendation_tools import RecommendationTools
@@ -64,6 +69,10 @@ def test_tool_definitions():
     recommendation_tools = RecommendationTools(recommender)
     tool_defs = recommendation_tools.get_tool_definitions()
     print(f"✓ RecommendationTools: {len(tool_defs)} tools defined")
+
+    agent_tools = AgentTools(RunManager(engine=recommender))
+    tool_defs = agent_tools.get_tool_definitions()
+    print(f"✓ AgentTools: {len(tool_defs)} tools defined")
 
 
 def test_resource_definitions():

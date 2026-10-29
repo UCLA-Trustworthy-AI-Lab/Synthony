@@ -12,6 +12,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Installation
 
+> **This project is installed under the anaconda `base` environment**
+> (`/opt/anaconda3/bin/python3`), not any other Python on this machine —
+> there are at least two other unrelated interpreters installed (Homebrew's
+> `python3.13`, python.org's `python3.12`) that do **not** have Synthony's
+> dependencies. `python3`/`pip3` are aliased to anaconda in `~/.zshrc`, but
+> that alias only applies in an interactive zsh shell that sources it —
+> scripts, other shell types, or some IDE terminals can silently fall
+> through to a different `python3` on `PATH` and fail with
+> `ModuleNotFoundError` for things that are clearly installed. If that
+> happens, activate the environment explicitly rather than relying on the
+> alias:
+> ```bash
+> source /opt/anaconda3/etc/profile.d/conda.sh && conda activate base
+> ```
+
 ```bash
 pip install -e .                  # Core only
 pip install -e ".[cli]"           # CLI tools (typer, rich)
@@ -50,9 +65,19 @@ pytest tests/integration/ -v              # Integration tests only
 pytest tests/unit/test_skewness_detector.py::test_detect_severe_skew -v  # Single test
 pytest -m "not requires_llm"              # Exclude LLM-dependent tests
 pytest --cov=synthony --cov-report=html   # Coverage with HTML report
+
+# MCP server tests are a separate pytest root, not under tests/:
+cd mcp_server && pytest test_server.py test_protocol.py test_agent_tools.py -v
+
+# Or use the wrapper (mirrors cicd.yml exactly, incl. the MCP step above):
+./scripts/run_tests.sh --all            # everything CI runs
+./scripts/run_tests.sh --mcp            # just MCP
+./scripts/run_tests.sh --all --slow     # + real synthcity subprocess training (tens of seconds)
 ```
 
 > **Note:** 6 tests in `tests/integration/test_api_integration.py` are skipif-gated on a live API server at `localhost:8000` (health check, upload/analyze, session retrieval, storage stats, system prompt list/upload). Without a running server they skip silently; start one first (`uvicorn synthony.api.server:app --port 8000`) for full integration coverage. Check for and kill any stale server already bound to that port before starting a fresh one -- a leftover process from a previous run can make failures look like application bugs.
+
+> **Note:** Two Agentic Mode tests (`tests/functional/test_synthcity_runner_e2e.py`) run real synthcity training/cancellation and are gated on `SYNTHONY_RUN_SLOW_TESTS=1` (in addition to `@pytest.mark.slow`, since no pytest invocation in this repo passes `-m "not slow"` -- the env var is what actually keeps them out of CI). See `docs/TESTING.md` for the full test-category reference and `docs/agents.md` for per-phase testing/verification detail (Agentic Mode Phases 1-6).
 
 ### Code Quality
 
@@ -117,7 +142,10 @@ RecommendationResult
 | `src/synthony/core/` | Data loading (`loaders.py`), analysis (`analyzer.py`), schemas (`schemas.py`) |
 | `src/synthony/detectors/` | Stress detection: skewness, cardinality, correlation, data_size |
 | `src/synthony/recommender/` | Recommendation engine + model capabilities registry |
-| `src/synthony/api/` | FastAPI REST server with SQLite persistence |
+| `src/synthony/api/` | FastAPI REST server with SQLite persistence; `run_endpoints.py` exposes agentic-mode run history (`GET /runs*`) |
+| `src/synthony/llm/` | Provider-agnostic LLM client (OpenAI, Anthropic, vLLM) — see `docs/agents.md` |
+| `src/synthony/agents/` | Agentic-mode agents: `RunManager`/`Orchestrator` state machine, `RecommenderAgent` multi-turn reasoning, synthesizer/benchmark steps, `StepRecorder` monitoring — see `docs/agents.md` |
+| `src/synthony/runners/` | Subprocess-isolated synthesizer training (synthcity plugins, registry, real cancellation) — see `docs/agents.md` |
 | `src/synthony/benchmark/` | Data quality metrics (KL/JS divergence, fidelity, utility, privacy) |
 | `src/synthony/utils/` | Configuration constants (`AnalyzerConfig`), thresholds |
 | `mcp_server/` | MCP protocol server for AI agent integration (tools, resources, prompts) |
@@ -165,7 +193,10 @@ The registry also stores all engine configuration:
 | Variable | Purpose |
 |----------|---------|
 | `SYNTHONY_DATA_DIR` | Dataset directory (default: `dataset/input_data`) |
-| `OPENAI_API_KEY` | Required for LLM-based recommendations |
+| `OPENAI_API_KEY` | Required for LLM-based recommendations (legacy path, or `synthony.llm` `provider="openai"`) |
+| `ANTHROPIC_API_KEY` | Required for `synthony.llm` `provider="anthropic"` |
+| `SYNTHONY_LLM_PROVIDER` | `synthony.llm` provider: `openai` (default), `anthropic`, or `vllm` |
+| `SYNTHONY_LLM_MODEL` | Model override for `synthony.llm`'s selected provider |
 | `MCP_DEBUG` | Set to any non-empty value to enable verbose MCP server logging (equivalent to `--verbose` flag) |
 
 ## Key Files
@@ -179,7 +210,10 @@ The registry also stores all engine configuration:
 - `scripts/optimize_scaling.py` - Bayesian optimization of scale factors (Optuna/TPE)
 - `ablation/run_ablations.py` - Ablation study experiment runner
 - `baselines/run_baselines.py` - Runs all 4 non-Synthony baselines and produces a comparison table
-- `docs/scoring_methodology.md` - Capability scoring formulas and engine pipeline
+- `docs/scoring_methodology.md` - Capability scoring formulas (one stage of the pipeline below)
+- `docs/capability_registry_pipeline.md` - How `config/model_capabilities.json` actually gets built: table-synthesizers simulation → dual measurement (profile-comparison + oracle-ranking) → Bayesian calibration → runtime use
+- `docs/agents.md` - Agentic Mode reference: all 6 phases (LLM client → CLI/hardening), per-phase verification evidence
+- `docs/realy_integration_plan.md` - Multi-agent plan for integrating Synthony into Realy (`table_reasoning`) as an optional RS adapter — parked pending PI sign-off
 
 ## MCP Server Integration
 

@@ -224,6 +224,18 @@ async def startup_event():
     from synthony.api import endpoints
     endpoints.set_services(analyzer, column_analyzer, recommender)
 
+    # Wire the agentic-mode RunManager (Phase 3) -- only if the recommender
+    # engine initialized; POST /runs returns 503 otherwise.
+    if recommender is not None:
+        from synthony.agents.manager import RunManager
+        from synthony.api import run_endpoints
+
+        run_manager = RunManager(engine=recommender)
+        recovered = await run_manager.startup_recovery()
+        if recovered:
+            print(f"⚠ Marked {recovered} orphaned run(s) from a prior crash as failed")
+        run_endpoints.set_run_manager(run_manager)
+
 
 # ============================================================================
 # Include Endpoints Router
@@ -231,8 +243,10 @@ async def startup_event():
 
 # Import after app creation to avoid circular dependency (endpoints imports from server)
 from synthony.api.endpoints import router as api_router  # noqa: E402
+from synthony.api.run_endpoints import router as run_router  # noqa: E402
 
 app.include_router(api_router)
+app.include_router(run_router)
 
 # ============================================================================
 # System Prompt Management Endpoints (kept in server.py)

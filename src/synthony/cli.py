@@ -1,9 +1,12 @@
 """
 Command-line interface for synthony.
 
-Provides two commands:
+Provides:
 - profile: Analyze a dataset and output stress factors
 - benchmark: Generate synthetic benchmark datasets
+- recommend: Recommend the optimal synthesis model for a dataset
+- run: Run an agentic synthesis (advise or full mode), in-process, via the
+  same RunManager/Orchestrator the REST API and MCP server use
 """
 
 import sys
@@ -692,6 +695,16 @@ def benchmark(
         raise typer.Exit(code=1)
 
 
+def _load_env_file() -> None:
+    """Load ./.env (as the API server does) so LLM keys kept there reach the CLI.
+    Never overrides variables already set in the environment."""
+    try:
+        from dotenv import find_dotenv, load_dotenv
+    except ImportError:  # python-dotenv ships with the [api] extra, not core
+        return
+    load_dotenv(find_dotenv(usecwd=True), override=False)
+
+
 def _score_interpretation(score: float) -> str:
     """Return colored interpretation of a 0-1 score."""
     if score >= 0.9:
@@ -915,14 +928,22 @@ def recommend(
         # Initialize recommendation engine
         console.print("[dim]Generating recommendations...[/dim]")
         
-        # Check for LLM requirements
+        # LLM-backed methods use the same provider-agnostic client as agentic mode
+        # (SYNTHONY_LLM_PROVIDER / OPENAI_API_KEY / ANTHROPIC_API_KEY / VLLM_URL)
+        llm_client = None
         if engine_method in ["llm", "hybrid"]:
-            api_key = os.environ.get("OPENAI_API_KEY")
-            if not api_key:
-                console.print("[yellow]⚠ OPENAI_API_KEY not set. Falling back to rule_based.[/yellow]")
+            from synthony.llm import factory as llm_factory
+
+            _load_env_file()
+            llm_client = llm_factory.resolve_llm_client()
+            if llm_client is None:
+                console.print(
+                    "[yellow]⚠ No LLM credentials configured (set OPENAI_API_KEY, "
+                    "ANTHROPIC_API_KEY or SYNTHONY_LLM_PROVIDER). Falling back to rule_based.[/yellow]"
+                )
                 engine_method = "rule_based"
-        
-        engine = ModelRecommendationEngine()
+
+        engine = ModelRecommendationEngine(llm_client=llm_client)
         result = engine.recommend(
             dataset_profile=profile,
             constraints=constraints,
@@ -940,7 +961,7 @@ def recommend(
         summary_table.add_row("Dataset ID", profile.dataset_id)
         summary_table.add_row("Row Count", str(profile.row_count))
         summary_table.add_row("Column Count", str(profile.column_count))
-        summary_table.add_row("Method", engine_method)
+        summary_table.add_row("Method", result.method)
         summary_table.add_row("", "")
         summary_table.add_row("[bold]Recommended Model[/bold]", f"[bold green]{result.recommended_model.model_name}[/bold green]")
         summary_table.add_row("Confidence", f"{result.recommended_model.confidence_score:.0%}")
@@ -1091,7 +1112,7 @@ def recommend(
         
         result_dict = {
             "dataset_id": result.dataset_id,
-            "method": engine_method,
+            "method": result.method,
             "constraints": constraints,
             "primary_recommendation": {
                 "model_name": prim.model_name,
@@ -1115,6 +1136,197 @@ def recommend(
             json.dump(result_dict, f, indent=2)
         console.print(f"[green]✓ Recommendations saved to:[/green] {output}")
 
+    except FileNotFoundError as e:
+        err_console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        err_console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+
+
+def run_command():
+    """Entry point for synthony-run command."""
+    app(["run"] + sys.argv[1:])
+
+
+@app.command()
+def run(
+    input_path: Path = typer.Option(
+        ..., "--input", "-i", help="Path to input dataset (CSV or Parquet)"
+    ),
+    mode: str = typer.Option(
+        "advise", "--mode", "-m",
+        help="Run mode: advise (recommend only) or full (train + generate + benchmark)"
+    ),
+    quality_threshold: float = typer.Option(
+        0.75, "--quality-threshold", help="mode=full only: benchmark score to accept, 0-1"
+    ),
+    max_iterations: int = typer.Option(
+        3, "--max-iterations", help="mode=full only: max reasoning/train/benchmark cycles"
+    ),
+    llm_provider: str = typer.Option(
+        None, "--llm-provider",
+        help="Override the default LLM provider (openai, anthropic, vllm, or none for rule-based)",
+    ),
+    llm_model: str = typer.Option(
+        None, "--llm-model", help="Override the default LLM model"
+    ),
+    cpu_only: bool = typer.Option(
+        False, "--cpu-only", help="Exclude GPU-only models"
+    ),
+    strict_dp: bool = typer.Option(
+        False, "--strict-dp", help="Only differential privacy models"
+    ),
+    output: Path = typer.Option(
+        None, "--output", "-o", help="Output JSON path for the full run detail (config, result, steps)"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show per-step progress as the run executes"
+    ),
+    no_llm: bool = typer.Option(
+        False, "--no-llm",
+        help="Run without an LLM: rule-based reasoning (also used automatically "
+        "when no LLM credentials are configured)",
+    ),
+):
+    """Run an agentic synthesis end to end: reason about the best model
+    (mode=advise), or actually train/generate/benchmark it, iterating up to
+    --max-iterations times if --quality-threshold isn't met (mode=full).
+
+    Runs entirely in-process via the same RunManager/Orchestrator the REST
+    API and MCP server use -- no synthony-api server needs to be running.
+    Writes to the same runs/run_steps SQLite tables (./data/synthony.db),
+    so a run started here shows up in GET /runs or the MCP list_runs tool
+    too, and vice versa.
+
+    Examples:
+
+        # Just get a recommendation
+        synthony-run -i data.csv
+
+        # Actually train + generate + benchmark
+        synthony-run -i data.csv --mode full
+
+        # With constraints, step-by-step progress, and a saved result
+        synthony-run -i data.csv --mode full --cpu-only -v -o result.json
+
+        # No LLM / no API key: rule-based reasoning (result marked degraded)
+        synthony-run -i data.csv --no-llm
+    """
+    import asyncio
+    import json as json_module
+
+    from synthony.agents.context import AgentContext, RunConfig, RunState
+    from synthony.agents.monitoring import StepRecorder
+    from synthony.agents.orchestrator import Orchestrator
+    from synthony.api.database import create_run, get_run_with_steps, init_database
+    from synthony.core.loaders import DataLoader
+    from synthony.core.schemas import RecommendationConstraints
+    from synthony.llm.factory import resolve_llm_client
+    from synthony.recommender.engine import ModelRecommendationEngine
+
+    if mode not in ("advise", "full"):
+        err_console.print(f"[red]Error:[/red] Invalid mode '{mode}'. Choose from: advise, full")
+        raise typer.Exit(code=1)
+
+    try:
+        console.print(f"[bold blue]Dataset:[/bold blue] {input_path}")
+        console.print(f"[bold blue]Mode:[/bold blue] {mode}")
+        console.print()
+
+        init_database()  # no-op if already initialized; ensures a fresh DB has the tables
+        df = DataLoader.load(input_path, validate=True)
+
+        config = RunConfig(
+            dataset_id=input_path.stem,
+            dataset_path=str(input_path),
+            mode=mode,
+            quality_threshold=quality_threshold,
+            max_iterations=max_iterations,
+            llm_provider="none" if no_llm else llm_provider,
+            llm_model=llm_model,
+            constraints=RecommendationConstraints(cpu_only=cpu_only, strict_dp=strict_dp),
+        )
+
+        async def _run() -> dict:
+            db_run = create_run(
+                mode=config.mode,
+                dataset_id=config.dataset_id,
+                config=config.model_dump(),
+                llm_provider=config.llm_provider,
+                llm_model=config.llm_model,
+            )
+            if verbose:
+                console.print(f"[dim]Run ID: {db_run.run_id}[/dim]")
+
+            _load_env_file()
+            llm_client = resolve_llm_client(provider=config.llm_provider, model=config.llm_model)
+            if llm_client is None:
+                console.print(
+                    "[yellow]⚠ No LLM (--no-llm, or no credentials configured): "
+                    "using rule-based reasoning; the result will be marked degraded.[/yellow]"
+                )
+            state = RunState(
+                run_id=db_run.run_id,
+                config=config,
+                recorder=StepRecorder(),
+                cancel_event=asyncio.Event(),
+            )
+            ctx = AgentContext(
+                state=state, llm_client=llm_client, engine=ModelRecommendationEngine(), df=df
+            )
+            await Orchestrator(ctx).run()
+            return get_run_with_steps(db_run.run_id)
+
+        console.print("[dim]Running agentic synthesis...[/dim]")
+        detail = asyncio.run(_run())
+
+        console.print()
+        console.print(f"[bold blue]Status:[/bold blue] {detail['status']}")
+
+        if detail["status"] == "completed":
+            result = detail["result"]
+            if mode == "advise":
+                top = result["ranked_candidates"][0]
+                console.print(
+                    f"[bold green]Recommended:[/bold green] {top['model_name']} "
+                    f"(confidence: {top['confidence']:.2f})"
+                )
+                console.print(f"[dim]{top['rationale']}[/dim]")
+            else:
+                console.print(f"[bold blue]Met threshold:[/bold blue] {result['met_threshold']}")
+                best = result.get("best_attempt")
+                if best:
+                    score = best["benchmark"]["overall_quality_score"]
+                    console.print(
+                        f"[bold green]Best model:[/bold green] {best['model_name']} "
+                        f"(quality score: {score:.3f})"
+                    )
+                    console.print(f"[dim]Output: {best['output_path']}[/dim]")
+                else:
+                    console.print("[yellow]No candidate trained successfully.[/yellow]")
+        elif detail["status"] == "failed":
+            err_console.print(f"[red]Run failed:[/red] {detail['error_message']}")
+
+        if verbose:
+            console.print("\n[bold blue]Steps:[/bold blue]")
+            for step in detail["steps"]:
+                console.print(
+                    f"  {step['agent']}.{step['step_name']}: {step['status']} "
+                    f"({step['duration_ms']}ms)"
+                )
+
+        if output:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            with open(output, "w") as f:
+                json_module.dump(detail, f, indent=2)
+            console.print(f"\n[dim]Full result written to: {output}[/dim]")
+
+        if detail["status"] in ("failed", "cancelled"):
+            raise typer.Exit(code=1)
+
+    except typer.Exit:
+        raise
     except FileNotFoundError as e:
         err_console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(code=1)
