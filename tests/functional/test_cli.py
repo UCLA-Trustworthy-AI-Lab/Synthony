@@ -233,6 +233,24 @@ class TestRecommendCommand:
         assert result.exit_code == 0, f"stderr: {result.output}"
         assert out_file.exists()
 
+    def test_recommend_output_records_thresholds_used(self, tmp_csv: Path, tmp_path: Path):
+        """--output should record the profile thresholds that the recommendation used."""
+        profile_file = tmp_path / "profile.json"
+        rec_file = tmp_path / "rec.json"
+        profiled = runner.invoke(app, ["profile", str(tmp_csv), "--output", str(profile_file)])
+        assert profiled.exit_code == 0, f"stderr: {profiled.output}"
+        result = runner.invoke(app, [
+            "recommend",
+            "--input", str(tmp_csv),
+            "--method", "rulebased",
+            "--output", str(rec_file),
+        ])
+        assert result.exit_code == 0, f"stderr: {result.output}"
+        rec = json.loads(rec_file.read_text())
+        expected = json.loads(profile_file.read_text())["thresholds_used"]
+        assert expected, "the profile must carry thresholds for this test to mean anything"
+        assert rec["thresholds_used"] == expected
+
     def test_recommend_missing_input(self, tmp_path: Path):
         """Missing input file should exit with code 1."""
         missing = tmp_path / "nonexistent.csv"

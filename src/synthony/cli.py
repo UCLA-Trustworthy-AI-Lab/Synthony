@@ -1130,8 +1130,10 @@ def recommend(
             ],
             "difficulty_summary": result.difficulty_summary,
             "excluded_models": result.excluded_models,
+            # The profile thresholds behind this recommendation, so a caller can record them.
+            "thresholds_used": profile.thresholds_used,
         }
-        
+
         with open(output, 'w') as f:
             json.dump(result_dict, f, indent=2)
         console.print(f"[green]✓ Recommendations saved to:[/green] {output}")
