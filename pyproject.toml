@@ -100,6 +100,10 @@ synthony-mcp = "mcp_server.server:main"
 where = ["src", "."]
 include = ["synthony*", "mcp_server*"]
 
+[tool.setuptools.package-data]
+# Read at run time by the recommendation engine; a regular (non-editable) install needs it.
+"synthony.recommender" = ["model_capabilities.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
